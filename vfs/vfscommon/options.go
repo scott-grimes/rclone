@@ -33,6 +33,7 @@ type Options struct {
 	WriteBack         time.Duration // time to wait before writing back dirty files
 	ReadAhead         fs.SizeSuffix // bytes to read ahead in cache mode "full"
 	UsedIsSize        bool          // if true, use the `rclone size` algorithm for Used size
+	FastFingerprint   bool          // if set use fast fingerprints
 }
 
 // DefaultOpt is the default values uses for Opt
@@ -60,4 +61,15 @@ var DefaultOpt = Options{
 	WriteBack:         5 * time.Second,
 	ReadAhead:         0 * fs.Mebi,
 	UsedIsSize:        false,
+}
+
+// Init the options, making sure everything is withing range
+func (opt *Options) Init() {
+	// Mask the permissions with the umask
+	opt.DirPerms &= ^os.FileMode(opt.Umask)
+	opt.FilePerms &= ^os.FileMode(opt.Umask)
+
+	// Make sure directories are returned as directories
+	opt.DirPerms |= os.ModeDir
+
 }

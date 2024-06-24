@@ -268,7 +268,7 @@ func (f *Fs) Root() string {
 // String converts this Fs to a string
 func (f *Fs) String() string {
 	if f.rootContainer == "" {
-		return fmt.Sprintf("Swift root")
+		return "Swift root"
 	}
 	if f.rootDirectory == "" {
 		return fmt.Sprintf("Swift container %s", f.rootContainer)
@@ -754,22 +754,34 @@ func (f *Fs) ListR(ctx context.Context, dir string, callback fs.ListRCallback) (
 }
 
 // About gets quota information
-func (f *Fs) About(ctx context.Context) (*fs.Usage, error) {
-	var containers []swift.Container
-	var err error
-	err = f.pacer.Call(func() (bool, error) {
-		containers, err = f.c.ContainersAll(ctx, nil)
-		return shouldRetry(ctx, err)
-	})
-	if err != nil {
-		return nil, fmt.Errorf("container listing failed: %w", err)
-	}
+func (f *Fs) About(ctx context.Context) (usage *fs.Usage, err error) {
 	var total, objects int64
-	for _, c := range containers {
-		total += c.Bytes
-		objects += c.Count
+	if f.rootContainer != "" {
+		var container swift.Container
+		err = f.pacer.Call(func() (bool, error) {
+			container, _, err = f.c.Container(ctx, f.rootContainer)
+			return shouldRetry(ctx, err)
+		})
+		if err != nil {
+			return nil, fmt.Errorf("container info failed: %w", err)
+		}
+		total = container.Bytes
+		objects = container.Count
+	} else {
+		var containers []swift.Container
+		err = f.pacer.Call(func() (bool, error) {
+			containers, err = f.c.ContainersAll(ctx, nil)
+			return shouldRetry(ctx, err)
+		})
+		if err != nil {
+			return nil, fmt.Errorf("container listing failed: %w", err)
+		}
+		for _, c := range containers {
+			total += c.Bytes
+			objects += c.Count
+		}
 	}
-	usage := &fs.Usage{
+	usage = &fs.Usage{
 		Used:    fs.NewUsageValue(total),   // bytes in use
 		Objects: fs.NewUsageValue(objects), // objects in use
 	}
@@ -1259,7 +1271,7 @@ func (o *Object) getSegmentsLargeObject(ctx context.Context) (map[string][]strin
 		if _, ok := containerSegments[segmentContainer]; !ok {
 			containerSegments[segmentContainer] = make([]string, 0, len(segmentObjects))
 		}
-		segments, _ := containerSegments[segmentContainer]
+		segments := containerSegments[segmentContainer]
 		segments = append(segments, segment.Name)
 		containerSegments[segmentContainer] = segments
 	}
@@ -1351,7 +1363,7 @@ func (o *Object) updateChunks(ctx context.Context, in0 io.Reader, headers swift.
 			return
 		}
 		fs.Debugf(o, "Delete segments when err raise %v", err)
-		if segmentInfos == nil || len(segmentInfos) == 0 {
+		if len(segmentInfos) == 0 {
 			return
 		}
 		_ctx := context.Background()
@@ -1406,7 +1418,7 @@ func (o *Object) updateChunks(ctx context.Context, in0 io.Reader, headers swift.
 }
 
 func deleteChunks(ctx context.Context, o *Object, segmentsContainer string, segmentInfos []string) {
-	if segmentInfos == nil || len(segmentInfos) == 0 {
+	if len(segmentInfos) == 0 {
 		return
 	}
 	for _, v := range segmentInfos {

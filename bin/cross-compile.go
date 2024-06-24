@@ -52,6 +52,7 @@ var (
 var osarches = []string{
 	"windows/386",
 	"windows/amd64",
+	"windows/arm64",
 	"darwin/amd64",
 	"darwin/arm64",
 	"linux/386",
@@ -83,6 +84,13 @@ var archFlags = map[string][]string{
 	"mips":   {"GOMIPS=softfloat"},
 	"mipsle": {"GOMIPS=softfloat"},
 	"arm-v7": {"GOARM=7"},
+}
+
+// Map Go architectures to NFPM architectures
+// Any missing are passed straight through
+var goarchToNfpm = map[string]string{
+	"arm":    "arm6",
+	"arm-v7": "arm7",
 }
 
 // runEnv - run a shell command with env
@@ -165,13 +173,17 @@ func buildZip(dir string) string {
 func buildDebAndRpm(dir, version, goarch string) []string {
 	// Make internal version number acceptable to .deb and .rpm
 	pkgVersion := version[1:]
-	pkgVersion = strings.Replace(pkgVersion, "β", "-beta", -1)
-	pkgVersion = strings.Replace(pkgVersion, "-", ".", -1)
+	pkgVersion = strings.ReplaceAll(pkgVersion, "β", "-beta")
+	pkgVersion = strings.ReplaceAll(pkgVersion, "-", ".")
+	nfpmArch, ok := goarchToNfpm[goarch]
+	if !ok {
+		nfpmArch = goarch
+	}
 
 	// Make nfpm.yaml from the template
 	substitute("../bin/nfpm.yaml", path.Join(dir, "nfpm.yaml"), map[string]string{
 		"Version": pkgVersion,
-		"Arch":    goarch,
+		"Arch":    nfpmArch,
 	})
 
 	// build them
@@ -253,8 +265,11 @@ func buildWindowsResourceSyso(goarch string, versionTag string) string {
 		"-o",
 		sysoPath,
 	}
-	if goarch == "amd64" {
+	if strings.Contains(goarch, "64") {
 		args = append(args, "-64") // Make the syso a 64-bit coff file
+	}
+	if strings.Contains(goarch, "arm") {
+		args = append(args, "-arm") // Make the syso an arm binary
 	}
 	args = append(args, jsonPath)
 	err = runEnv(args, nil)
@@ -377,7 +392,7 @@ func compileArch(version, goos, goarch, dir string) bool {
 			artifacts := []string{buildZip(dir)}
 			// build a .deb and .rpm if appropriate
 			if goos == "linux" {
-				artifacts = append(artifacts, buildDebAndRpm(dir, version, stripVersion(goarch))...)
+				artifacts = append(artifacts, buildDebAndRpm(dir, version, goarch)...)
 			}
 			if *copyAs != "" {
 				for _, artifact := range artifacts {

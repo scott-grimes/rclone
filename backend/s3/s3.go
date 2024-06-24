@@ -32,9 +32,11 @@ import (
 	"github.com/aws/aws-sdk-go/aws/endpoints"
 	"github.com/aws/aws-sdk-go/aws/request"
 	"github.com/aws/aws-sdk-go/aws/session"
+	v4 "github.com/aws/aws-sdk-go/aws/signer/v4"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/ncw/swift/v2"
 	"github.com/rclone/rclone/fs"
+	"github.com/rclone/rclone/fs/chunksize"
 	"github.com/rclone/rclone/fs/config"
 	"github.com/rclone/rclone/fs/config/configmap"
 	"github.com/rclone/rclone/fs/config/configstruct"
@@ -58,7 +60,7 @@ import (
 func init() {
 	fs.Register(&fs.RegInfo{
 		Name:        "s3",
-		Description: "Amazon S3 Compliant Storage Providers including AWS, Alibaba, Ceph, Digital Ocean, Dreamhost, IBM COS, Minio, RackCorp, SeaweedFS, and Tencent COS",
+		Description: "Amazon S3 Compliant Storage Providers including AWS, Alibaba, Ceph, China Mobile, Cloudflare, ArvanCloud, Digital Ocean, Dreamhost, Huawei OBS, IBM COS, Lyve Cloud, Minio, Netease, RackCorp, Scaleway, SeaweedFS, StackPath, Storj, Tencent COS and Wasabi",
 		NewFs:       NewFs,
 		CommandHelp: commandHelp,
 		Options: []fs.Option{{
@@ -76,14 +78,29 @@ func init() {
 				Value: "Ceph",
 				Help:  "Ceph Object Storage",
 			}, {
+				Value: "ChinaMobile",
+				Help:  "China Mobile Ecloud Elastic Object Storage (EOS)",
+			}, {
+				Value: "Cloudflare",
+				Help:  "Cloudflare R2 Storage",
+			}, {
+				Value: "ArvanCloud",
+				Help:  "Arvan Cloud Object Storage (AOS)",
+			}, {
 				Value: "DigitalOcean",
 				Help:  "Digital Ocean Spaces",
 			}, {
 				Value: "Dreamhost",
 				Help:  "Dreamhost DreamObjects",
 			}, {
+				Value: "HuaweiOBS",
+				Help:  "Huawei Object Storage Service",
+			}, {
 				Value: "IBMCOS",
 				Help:  "IBM COS S3",
+			}, {
+				Value: "LyveCloud",
+				Help:  "Seagate Lyve Cloud",
 			}, {
 				Value: "Minio",
 				Help:  "Minio Object Storage",
@@ -102,6 +119,9 @@ func init() {
 			}, {
 				Value: "StackPath",
 				Help:  "StackPath Object Storage",
+			}, {
+				Value: "Storj",
+				Help:  "Storj (S3 Compatible Gateway)",
 			}, {
 				Value: "TencentCOS",
 				Help:  "Tencent Cloud Object Storage (COS)",
@@ -284,11 +304,72 @@ func init() {
 			}, {
 				Value: "fr-par",
 				Help:  "Paris, France",
+			}, {
+				Value: "pl-waw",
+				Help:  "Warsaw, Poland",
+			}},
+		}, {
+			Name:     "region",
+			Help:     "Region to connect to. - the location where your bucket will be created and your data stored. Need bo be same with your endpoint.\n",
+			Provider: "HuaweiOBS",
+			Examples: []fs.OptionExample{{
+				Value: "af-south-1",
+				Help:  "AF-Johannesburg",
+			}, {
+				Value: "ap-southeast-2",
+				Help:  "AP-Bangkok",
+			}, {
+				Value: "ap-southeast-3",
+				Help:  "AP-Singapore",
+			}, {
+				Value: "cn-east-3",
+				Help:  "CN East-Shanghai1",
+			}, {
+				Value: "cn-east-2",
+				Help:  "CN East-Shanghai2",
+			}, {
+				Value: "cn-north-1",
+				Help:  "CN North-Beijing1",
+			}, {
+				Value: "cn-north-4",
+				Help:  "CN North-Beijing4",
+			}, {
+				Value: "cn-south-1",
+				Help:  "CN South-Guangzhou",
+			}, {
+				Value: "ap-southeast-1",
+				Help:  "CN-Hong Kong",
+			}, {
+				Value: "sa-argentina-1",
+				Help:  "LA-Buenos Aires1",
+			}, {
+				Value: "sa-peru-1",
+				Help:  "LA-Lima1",
+			}, {
+				Value: "na-mexico-1",
+				Help:  "LA-Mexico City1",
+			}, {
+				Value: "sa-chile-1",
+				Help:  "LA-Santiago2",
+			}, {
+				Value: "sa-brazil-1",
+				Help:  "LA-Sao Paulo1",
+			}, {
+				Value: "ru-northwest-2",
+				Help:  "RU-Moscow2",
+			}},
+		}, {
+			Name:     "region",
+			Help:     "Region to connect to.",
+			Provider: "Cloudflare",
+			Examples: []fs.OptionExample{{
+				Value: "auto",
+				Help:  "R2 buckets are automatically distributed across Cloudflare's data centers for low latency.",
 			}},
 		}, {
 			Name:     "region",
 			Help:     "Region to connect to.\n\nLeave blank if you are using an S3 clone and you don't have a region.",
-			Provider: "!AWS,Alibaba,RackCorp,Scaleway,TencentCOS",
+			Provider: "!AWS,Alibaba,ChinaMobile,Cloudflare,ArvanCloud,RackCorp,Scaleway,Storj,TencentCOS,HuaweiOBS",
 			Examples: []fs.OptionExample{{
 				Value: "",
 				Help:  "Use this if unsure.\nWill use v4 signatures and an empty region.",
@@ -300,6 +381,114 @@ func init() {
 			Name:     "endpoint",
 			Help:     "Endpoint for S3 API.\n\nLeave blank if using AWS to use the default endpoint for the region.",
 			Provider: "AWS",
+		}, {
+			// ChinaMobile endpoints: https://ecloud.10086.cn/op-help-center/doc/article/24534
+			Name:     "endpoint",
+			Help:     "Endpoint for China Mobile Ecloud Elastic Object Storage (EOS) API.",
+			Provider: "ChinaMobile",
+			Examples: []fs.OptionExample{{
+				Value: "eos-wuxi-1.cmecloud.cn",
+				Help:  "The default endpoint - a good choice if you are unsure.\nEast China (Suzhou)",
+			}, {
+				Value: "eos-jinan-1.cmecloud.cn",
+				Help:  "East China (Jinan)",
+			}, {
+				Value: "eos-ningbo-1.cmecloud.cn",
+				Help:  "East China (Hangzhou)",
+			}, {
+				Value: "eos-shanghai-1.cmecloud.cn",
+				Help:  "East China (Shanghai-1)",
+			}, {
+				Value: "eos-zhengzhou-1.cmecloud.cn",
+				Help:  "Central China (Zhengzhou)",
+			}, {
+				Value: "eos-hunan-1.cmecloud.cn",
+				Help:  "Central China (Changsha-1)",
+			}, {
+				Value: "eos-zhuzhou-1.cmecloud.cn",
+				Help:  "Central China (Changsha-2)",
+			}, {
+				Value: "eos-guangzhou-1.cmecloud.cn",
+				Help:  "South China (Guangzhou-2)",
+			}, {
+				Value: "eos-dongguan-1.cmecloud.cn",
+				Help:  "South China (Guangzhou-3)",
+			}, {
+				Value: "eos-beijing-1.cmecloud.cn",
+				Help:  "North China (Beijing-1)",
+			}, {
+				Value: "eos-beijing-2.cmecloud.cn",
+				Help:  "North China (Beijing-2)",
+			}, {
+				Value: "eos-beijing-4.cmecloud.cn",
+				Help:  "North China (Beijing-3)",
+			}, {
+				Value: "eos-huhehaote-1.cmecloud.cn",
+				Help:  "North China (Huhehaote)",
+			}, {
+				Value: "eos-chengdu-1.cmecloud.cn",
+				Help:  "Southwest China (Chengdu)",
+			}, {
+				Value: "eos-chongqing-1.cmecloud.cn",
+				Help:  "Southwest China (Chongqing)",
+			}, {
+				Value: "eos-guiyang-1.cmecloud.cn",
+				Help:  "Southwest China (Guiyang)",
+			}, {
+				Value: "eos-xian-1.cmecloud.cn",
+				Help:  "Nouthwest China (Xian)",
+			}, {
+				Value: "eos-yunnan.cmecloud.cn",
+				Help:  "Yunnan China (Kunming)",
+			}, {
+				Value: "eos-yunnan-2.cmecloud.cn",
+				Help:  "Yunnan China (Kunming-2)",
+			}, {
+				Value: "eos-tianjin-1.cmecloud.cn",
+				Help:  "Tianjin China (Tianjin)",
+			}, {
+				Value: "eos-jilin-1.cmecloud.cn",
+				Help:  "Jilin China (Changchun)",
+			}, {
+				Value: "eos-hubei-1.cmecloud.cn",
+				Help:  "Hubei China (Xiangyan)",
+			}, {
+				Value: "eos-jiangxi-1.cmecloud.cn",
+				Help:  "Jiangxi China (Nanchang)",
+			}, {
+				Value: "eos-gansu-1.cmecloud.cn",
+				Help:  "Gansu China (Lanzhou)",
+			}, {
+				Value: "eos-shanxi-1.cmecloud.cn",
+				Help:  "Shanxi China (Taiyuan)",
+			}, {
+				Value: "eos-liaoning-1.cmecloud.cn",
+				Help:  "Liaoning China (Shenyang)",
+			}, {
+				Value: "eos-hebei-1.cmecloud.cn",
+				Help:  "Hebei China (Shijiazhuang)",
+			}, {
+				Value: "eos-fujian-1.cmecloud.cn",
+				Help:  "Fujian China (Xiamen)",
+			}, {
+				Value: "eos-guangxi-1.cmecloud.cn",
+				Help:  "Guangxi China (Nanning)",
+			}, {
+				Value: "eos-anhui-1.cmecloud.cn",
+				Help:  "Anhui China (Huainan)",
+			}},
+		}, {
+			// ArvanCloud endpoints: https://www.arvancloud.com/en/products/cloud-storage
+			Name:     "endpoint",
+			Help:     "Endpoint for Arvan Cloud Object Storage (AOS) API.",
+			Provider: "ArvanCloud",
+			Examples: []fs.OptionExample{{
+				Value: "s3.ir-thr-at1.arvanstorage.com",
+				Help:  "The default endpoint - a good choice if you are unsure.\nTehran Iran (Asiatech)",
+			}, {
+				Value: "s3.ir-tbz-sh1.arvanstorage.com",
+				Help:  "Tabriz Iran (Shahriar)",
+			}},
 		}, {
 			Name:     "endpoint",
 			Help:     "Endpoint for IBM COS S3 API.\n\nSpecify if using an IBM COS On Premise.",
@@ -573,6 +762,57 @@ func init() {
 				Help:  "Middle East 1 (Dubai)",
 			}},
 		}, {
+			// obs endpoints: https://developer.huaweicloud.com/intl/en-us/endpoint?OBS
+			Name:     "endpoint",
+			Help:     "Endpoint for OBS API.",
+			Provider: "HuaweiOBS",
+			Examples: []fs.OptionExample{{
+				Value: "obs.af-south-1.myhuaweicloud.com",
+				Help:  "AF-Johannesburg",
+			}, {
+				Value: "obs.ap-southeast-2.myhuaweicloud.com",
+				Help:  "AP-Bangkok",
+			}, {
+				Value: "obs.ap-southeast-3.myhuaweicloud.com",
+				Help:  "AP-Singapore",
+			}, {
+				Value: "obs.cn-east-3.myhuaweicloud.com",
+				Help:  "CN East-Shanghai1",
+			}, {
+				Value: "obs.cn-east-2.myhuaweicloud.com",
+				Help:  "CN East-Shanghai2",
+			}, {
+				Value: "obs.cn-north-1.myhuaweicloud.com",
+				Help:  "CN North-Beijing1",
+			}, {
+				Value: "obs.cn-north-4.myhuaweicloud.com",
+				Help:  "CN North-Beijing4",
+			}, {
+				Value: "obs.cn-south-1.myhuaweicloud.com",
+				Help:  "CN South-Guangzhou",
+			}, {
+				Value: "obs.ap-southeast-1.myhuaweicloud.com",
+				Help:  "CN-Hong Kong",
+			}, {
+				Value: "obs.sa-argentina-1.myhuaweicloud.com",
+				Help:  "LA-Buenos Aires1",
+			}, {
+				Value: "obs.sa-peru-1.myhuaweicloud.com",
+				Help:  "LA-Lima1",
+			}, {
+				Value: "obs.na-mexico-1.myhuaweicloud.com",
+				Help:  "LA-Mexico City1",
+			}, {
+				Value: "obs.sa-chile-1.myhuaweicloud.com",
+				Help:  "LA-Santiago2",
+			}, {
+				Value: "obs.sa-brazil-1.myhuaweicloud.com",
+				Help:  "LA-Sao Paulo1",
+			}, {
+				Value: "obs.ru-northwest-2.myhuaweicloud.com",
+				Help:  "RU-Moscow2",
+			}},
+		}, {
 			Name:     "endpoint",
 			Help:     "Endpoint for Scaleway Object Storage.",
 			Provider: "Scaleway",
@@ -582,6 +822,9 @@ func init() {
 			}, {
 				Value: "s3.fr-par.scw.cloud",
 				Help:  "Paris Endpoint",
+			}, {
+				Value: "s3.pl-waw.scw.cloud",
+				Help:  "Warsaw Endpoint",
 			}},
 		}, {
 			Name:     "endpoint",
@@ -596,6 +839,20 @@ func init() {
 			}, {
 				Value: "s3.eu-central-1.stackpathstorage.com",
 				Help:  "EU Endpoint",
+			}},
+		}, {
+			Name:     "endpoint",
+			Help:     "Endpoint of the Shared Gateway.",
+			Provider: "Storj",
+			Examples: []fs.OptionExample{{
+				Value: "gateway.eu1.storjshare.io",
+				Help:  "EU1 Shared Gateway",
+			}, {
+				Value: "gateway.us1.storjshare.io",
+				Help:  "US1 Shared Gateway",
+			}, {
+				Value: "gateway.ap1.storjshare.io",
+				Help:  "Asia-Pacific Shared Gateway",
 			}},
 		}, {
 			// cos endpoints: https://intl.cloud.tencent.com/document/product/436/6224
@@ -726,7 +983,7 @@ func init() {
 		}, {
 			Name:     "endpoint",
 			Help:     "Endpoint for S3 API.\n\nRequired when using an S3 clone.",
-			Provider: "!AWS,IBMCOS,TencentCOS,Alibaba,Scaleway,StackPath,RackCorp",
+			Provider: "!AWS,IBMCOS,TencentCOS,HuaweiOBS,Alibaba,ChinaMobile,ArvanCloud,Scaleway,StackPath,Storj,RackCorp",
 			Examples: []fs.OptionExample{{
 				Value:    "objects-us-east-1.dream.io",
 				Help:     "Dream Objects endpoint",
@@ -748,6 +1005,18 @@ func init() {
 				Help:     "SeaweedFS S3 localhost",
 				Provider: "SeaweedFS",
 			}, {
+				Value:    "s3.us-east-1.lyvecloud.seagate.com",
+				Help:     "Seagate Lyve Cloud US East 1 (Virginia)",
+				Provider: "LyveCloud",
+			}, {
+				Value:    "s3.us-west-1.lyvecloud.seagate.com",
+				Help:     "Seagate Lyve Cloud US West 1 (California)",
+				Provider: "LyveCloud",
+			}, {
+				Value:    "s3.ap-southeast-1.lyvecloud.seagate.com",
+				Help:     "Seagate Lyve Cloud AP Southeast 1 (Singapore)",
+				Provider: "LyveCloud",
+			}, {
 				Value:    "s3.wasabisys.com",
 				Help:     "Wasabi US East endpoint",
 				Provider: "Wasabi",
@@ -767,6 +1036,10 @@ func init() {
 				Value:    "s3.ap-northeast-2.wasabisys.com",
 				Help:     "Wasabi AP Northeast 2 (Osaka) endpoint",
 				Provider: "Wasabi",
+			}, {
+				Value:    "s3.ir-thr-at1.arvanstorage.com",
+				Help:     "ArvanCloud Tehran Iran (Asiatech) endpoint",
+				Provider: "ArvanCloud",
 			}},
 		}, {
 			Name:     "location_constraint",
@@ -847,6 +1120,112 @@ func init() {
 			}, {
 				Value: "us-gov-west-1",
 				Help:  "AWS GovCloud (US) Region",
+			}},
+		}, {
+			Name:     "location_constraint",
+			Help:     "Location constraint - must match endpoint.\n\nUsed when creating buckets only.",
+			Provider: "ChinaMobile",
+			Examples: []fs.OptionExample{{
+				Value: "wuxi1",
+				Help:  "East China (Suzhou)",
+			}, {
+				Value: "jinan1",
+				Help:  "East China (Jinan)",
+			}, {
+				Value: "ningbo1",
+				Help:  "East China (Hangzhou)",
+			}, {
+				Value: "shanghai1",
+				Help:  "East China (Shanghai-1)",
+			}, {
+				Value: "zhengzhou1",
+				Help:  "Central China (Zhengzhou)",
+			}, {
+				Value: "hunan1",
+				Help:  "Central China (Changsha-1)",
+			}, {
+				Value: "zhuzhou1",
+				Help:  "Central China (Changsha-2)",
+			}, {
+				Value: "guangzhou1",
+				Help:  "South China (Guangzhou-2)",
+			}, {
+				Value: "dongguan1",
+				Help:  "South China (Guangzhou-3)",
+			}, {
+				Value: "beijing1",
+				Help:  "North China (Beijing-1)",
+			}, {
+				Value: "beijing2",
+				Help:  "North China (Beijing-2)",
+			}, {
+				Value: "beijing4",
+				Help:  "North China (Beijing-3)",
+			}, {
+				Value: "huhehaote1",
+				Help:  "North China (Huhehaote)",
+			}, {
+				Value: "chengdu1",
+				Help:  "Southwest China (Chengdu)",
+			}, {
+				Value: "chongqing1",
+				Help:  "Southwest China (Chongqing)",
+			}, {
+				Value: "guiyang1",
+				Help:  "Southwest China (Guiyang)",
+			}, {
+				Value: "xian1",
+				Help:  "Nouthwest China (Xian)",
+			}, {
+				Value: "yunnan",
+				Help:  "Yunnan China (Kunming)",
+			}, {
+				Value: "yunnan2",
+				Help:  "Yunnan China (Kunming-2)",
+			}, {
+				Value: "tianjin1",
+				Help:  "Tianjin China (Tianjin)",
+			}, {
+				Value: "jilin1",
+				Help:  "Jilin China (Changchun)",
+			}, {
+				Value: "hubei1",
+				Help:  "Hubei China (Xiangyan)",
+			}, {
+				Value: "jiangxi1",
+				Help:  "Jiangxi China (Nanchang)",
+			}, {
+				Value: "gansu1",
+				Help:  "Gansu China (Lanzhou)",
+			}, {
+				Value: "shanxi1",
+				Help:  "Shanxi China (Taiyuan)",
+			}, {
+				Value: "liaoning1",
+				Help:  "Liaoning China (Shenyang)",
+			}, {
+				Value: "hebei1",
+				Help:  "Hebei China (Shijiazhuang)",
+			}, {
+				Value: "fujian1",
+				Help:  "Fujian China (Xiamen)",
+			}, {
+				Value: "guangxi1",
+				Help:  "Guangxi China (Nanning)",
+			}, {
+				Value: "anhui1",
+				Help:  "Anhui China (Huainan)",
+			}},
+		}, {
+			Name:     "location_constraint",
+			Help:     "Location constraint - must match endpoint.\n\nUsed when creating buckets only.",
+			Provider: "ArvanCloud",
+			Examples: []fs.OptionExample{{
+				Value: "ir-thr-at1",
+				Help:  "Tehran Iran (Asiatech)",
+			}, {
+				Value: "ir-tbz-sh1",
+				Help:  "Tabriz Iran (Shahriar)",
 			}},
 		}, {
 			Name:     "location_constraint",
@@ -1014,7 +1393,7 @@ func init() {
 		}, {
 			Name:     "location_constraint",
 			Help:     "Location constraint - must be set to match the Region.\n\nLeave blank if not sure. Used when creating buckets only.",
-			Provider: "!AWS,IBMCOS,Alibaba,RackCorp,Scaleway,StackPath,TencentCOS",
+			Provider: "!AWS,IBMCOS,Alibaba,HuaweiOBS,ChinaMobile,Cloudflare,ArvanCloud,RackCorp,Scaleway,StackPath,Storj,TencentCOS",
 		}, {
 			Name: "acl",
 			Help: `Canned ACL used when creating buckets and storing or copying objects.
@@ -1025,6 +1404,7 @@ For more info visit https://docs.aws.amazon.com/AmazonS3/latest/dev/acl-overview
 
 Note that this ACL is applied when server-side copying objects as S3
 doesn't copy the ACL from the source but rather writes a fresh one.`,
+			Provider: "!Storj,Cloudflare",
 			Examples: []fs.OptionExample{{
 				Value:    "default",
 				Help:     "Owner gets Full_CONTROL.\nNo one else has access rights (default).",
@@ -1048,11 +1428,11 @@ doesn't copy the ACL from the source but rather writes a fresh one.`,
 			}, {
 				Value:    "bucket-owner-read",
 				Help:     "Object owner gets FULL_CONTROL.\nBucket owner gets READ access.\nIf you specify this canned ACL when creating a bucket, Amazon S3 ignores it.",
-				Provider: "!IBMCOS",
+				Provider: "!IBMCOS,ChinaMobile",
 			}, {
 				Value:    "bucket-owner-full-control",
 				Help:     "Both the object owner and the bucket owner get FULL_CONTROL over the object.\nIf you specify this canned ACL when creating a bucket, Amazon S3 ignores it.",
-				Provider: "!IBMCOS",
+				Provider: "!IBMCOS,ChinaMobile",
 			}, {
 				Value:    "private",
 				Help:     "Owner gets FULL_CONTROL.\nNo one else has access rights (default).\nThis acl is available on IBM Cloud (Infra), IBM Cloud (Storage), On-Premise COS.",
@@ -1101,7 +1481,7 @@ isn't set then "acl" is used instead.`,
 		}, {
 			Name:     "server_side_encryption",
 			Help:     "The server-side encryption algorithm used when storing this object in S3.",
-			Provider: "AWS,Ceph,Minio",
+			Provider: "AWS,Ceph,ChinaMobile,Minio",
 			Examples: []fs.OptionExample{{
 				Value: "",
 				Help:  "None",
@@ -1109,13 +1489,14 @@ isn't set then "acl" is used instead.`,
 				Value: "AES256",
 				Help:  "AES256",
 			}, {
-				Value: "aws:kms",
-				Help:  "aws:kms",
+				Value:    "aws:kms",
+				Help:     "aws:kms",
+				Provider: "!ChinaMobile",
 			}},
 		}, {
 			Name:     "sse_customer_algorithm",
 			Help:     "If using SSE-C, the server-side encryption algorithm used when storing this object in S3.",
-			Provider: "AWS,Ceph,Minio",
+			Provider: "AWS,Ceph,ChinaMobile,Minio",
 			Advanced: true,
 			Examples: []fs.OptionExample{{
 				Value: "",
@@ -1138,7 +1519,7 @@ isn't set then "acl" is used instead.`,
 		}, {
 			Name:     "sse_customer_key",
 			Help:     "If using SSE-C you must provide the secret encryption key used to encrypt/decrypt your data.",
-			Provider: "AWS,Ceph,Minio",
+			Provider: "AWS,Ceph,ChinaMobile,Minio",
 			Advanced: true,
 			Examples: []fs.OptionExample{{
 				Value: "",
@@ -1150,7 +1531,7 @@ isn't set then "acl" is used instead.`,
 
 If you leave it blank, this is calculated automatically from the sse_customer_key provided.
 `,
-			Provider: "AWS,Ceph,Minio",
+			Provider: "AWS,Ceph,ChinaMobile,Minio",
 			Advanced: true,
 			Examples: []fs.OptionExample{{
 				Value: "",
@@ -1205,6 +1586,33 @@ If you leave it blank, this is calculated automatically from the sse_customer_ke
 			}, {
 				Value: "STANDARD_IA",
 				Help:  "Infrequent access storage mode",
+			}},
+		}, {
+			// Mapping from here: https://ecloud.10086.cn/op-help-center/doc/article/24495
+			Name:     "storage_class",
+			Help:     "The storage class to use when storing new objects in ChinaMobile.",
+			Provider: "ChinaMobile",
+			Examples: []fs.OptionExample{{
+				Value: "",
+				Help:  "Default",
+			}, {
+				Value: "STANDARD",
+				Help:  "Standard storage class",
+			}, {
+				Value: "GLACIER",
+				Help:  "Archive storage mode",
+			}, {
+				Value: "STANDARD_IA",
+				Help:  "Infrequent access storage mode",
+			}},
+		}, {
+			// Mapping from here: https://www.arvancloud.com/en/products/cloud-storage
+			Name:     "storage_class",
+			Help:     "The storage class to use when storing new objects in ArvanCloud.",
+			Provider: "ArvanCloud",
+			Examples: []fs.OptionExample{{
+				Value: "STANDARD",
+				Help:  "Standard storage class",
 			}},
 		}, {
 			// Mapping from here: https://intl.cloud.tencent.com/document/product/436/30925
@@ -1530,6 +1938,28 @@ See: https://github.com/rclone/rclone/issues/4673, https://github.com/rclone/rcl
 This is usually set to a CloudFront CDN URL as AWS S3 offers
 cheaper egress for data downloaded through the CloudFront network.`,
 			Advanced: true,
+		}, {
+			Name: "use_multipart_etag",
+			Help: `Whether to use ETag in multipart uploads for verification
+
+This should be true, false or left unset to use the default for the provider.
+`,
+			Default:  fs.Tristate{},
+			Advanced: true,
+		}, {
+			Name: "use_presigned_request",
+			Help: `Whether to use a presigned request or PutObject for single part uploads
+
+If this is false rclone will use PutObject from the AWS SDK to upload
+an object.
+
+Versions of rclone < 1.59 use presigned requests to upload a single
+part object and setting this flag to true will re-enable that
+functionality. This shouldn't be necessary except in exceptional
+circumstances or for testing.
+`,
+			Default:  false,
+			Advanced: true,
 		},
 		}})
 }
@@ -1594,6 +2024,8 @@ type Options struct {
 	MemoryPoolUseMmap     bool                 `config:"memory_pool_use_mmap"`
 	DisableHTTP2          bool                 `config:"disable_http2"`
 	DownloadURL           string               `config:"download_url"`
+	UseMultipartEtag      fs.Tristate          `config:"use_multipart_etag"`
+	UsePresignedRequest   bool                 `config:"use_presigned_request"`
 }
 
 // Fs represents a remote s3 server
@@ -1605,6 +2037,7 @@ type Fs struct {
 	ctx           context.Context  // global context for reading config
 	features      *fs.Features     // optional features
 	c             *s3.S3           // the connection to the s3 server
+	cu            *s3.S3           // unsigned connection to the s3 server for PutObject
 	ses           *session.Session // the s3 session
 	rootBucket    string           // bucket part of root (if any)
 	rootDirectory string           // directory part of root (if any)
@@ -1647,7 +2080,7 @@ func (f *Fs) Root() string {
 // String converts this Fs to a string
 func (f *Fs) String() string {
 	if f.rootBucket == "" {
-		return fmt.Sprintf("S3 root")
+		return "S3 root"
 	}
 	if f.rootDirectory == "" {
 		return fmt.Sprintf("S3 bucket %s", f.rootBucket)
@@ -1737,7 +2170,11 @@ func getClient(ctx context.Context, opt *Options) *http.Client {
 }
 
 // s3Connection makes a connection to s3
-func s3Connection(ctx context.Context, opt *Options, client *http.Client) (*s3.S3, *session.Session, error) {
+//
+// If unsignedBody is set then the connection is configured for
+// unsigned bodies which is necessary for PutObject if we don't want
+// it to seek
+func s3Connection(ctx context.Context, opt *Options, client *http.Client) (*s3.S3, *s3.S3, *session.Session, error) {
 	ci := fs.GetConfig(ctx)
 	// Make the auth
 	v := credentials.Value{
@@ -1754,7 +2191,7 @@ func s3Connection(ctx context.Context, opt *Options, client *http.Client) (*s3.S
 	// start a new AWS session
 	awsSession, err := session.NewSession()
 	if err != nil {
-		return nil, nil, fmt.Errorf("NewSession: %w", err)
+		return nil, nil, nil, fmt.Errorf("NewSession: %w", err)
 	}
 
 	// first provider to supply a credential set "wins"
@@ -1794,9 +2231,9 @@ func s3Connection(ctx context.Context, opt *Options, client *http.Client) (*s3.S
 		// if no access key/secret and iam is explicitly disabled then fall back to anon interaction
 		cred = credentials.AnonymousCredentials
 	case v.AccessKeyID == "":
-		return nil, nil, errors.New("access_key_id not found")
+		return nil, nil, nil, errors.New("access_key_id not found")
 	case v.SecretAccessKey == "":
-		return nil, nil, errors.New("secret_access_key not found")
+		return nil, nil, nil, errors.New("secret_access_key not found")
 	}
 
 	if opt.Region == "" {
@@ -1835,25 +2272,36 @@ func s3Connection(ctx context.Context, opt *Options, client *http.Client) (*s3.S
 		// (from the shared config file) if the passed-in Options.Config.Credentials is nil.
 		awsSessionOpts.Config.Credentials = nil
 	}
+	// Setting this stops PutObject reading the body twice and seeking
+	// We add our own Content-MD5 for data protection
+	awsSessionOpts.Config.S3DisableContentMD5Validation = aws.Bool(true)
 	ses, err := session.NewSessionWithOptions(awsSessionOpts)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
-	c := s3.New(ses)
-	if opt.V2Auth || opt.Region == "other-v2-signature" {
-		fs.Debugf(nil, "Using v2 auth")
-		signer := func(req *request.Request) {
-			// Ignore AnonymousCredentials object
-			if req.Config.Credentials == credentials.AnonymousCredentials {
-				return
+	newC := func(unsignedBody bool) *s3.S3 {
+		c := s3.New(ses)
+		if opt.V2Auth || opt.Region == "other-v2-signature" {
+			fs.Debugf(nil, "Using v2 auth")
+			signer := func(req *request.Request) {
+				// Ignore AnonymousCredentials object
+				if req.Config.Credentials == credentials.AnonymousCredentials {
+					return
+				}
+				sign(v.AccessKeyID, v.SecretAccessKey, req.HTTPRequest)
 			}
-			sign(v.AccessKeyID, v.SecretAccessKey, req.HTTPRequest)
+			c.Handlers.Sign.Clear()
+			c.Handlers.Sign.PushBackNamed(corehandlers.BuildContentLengthHandler)
+			c.Handlers.Sign.PushBack(signer)
+		} else if unsignedBody {
+			// If the body is unsigned then tell the signer that we aren't signing the payload
+			c.Handlers.Sign.Clear()
+			c.Handlers.Sign.PushBackNamed(corehandlers.BuildContentLengthHandler)
+			c.Handlers.Sign.PushBackNamed(v4.BuildNamedHandler("v4.SignRequestHandler.WithUnsignedPayload", v4.WithUnsignedPayload))
 		}
-		c.Handlers.Sign.Clear()
-		c.Handlers.Sign.PushBackNamed(corehandlers.BuildContentLengthHandler)
-		c.Handlers.Sign.PushBack(signer)
+		return c
 	}
-	return c, ses, nil
+	return newC(false), newC(true), ses, nil
 }
 
 func checkUploadChunkSize(cs fs.SizeSuffix) error {
@@ -1897,13 +2345,29 @@ func setQuirks(opt *Options) {
 		listObjectsV2     = true
 		virtualHostStyle  = true
 		urlEncodeListings = true
+		useMultipartEtag  = true
 	)
 	switch opt.Provider {
 	case "AWS":
 		// No quirks
 	case "Alibaba":
-		// No quirks
+		useMultipartEtag = false // Alibaba seems to calculate multipart Etags differently from AWS
+	case "HuaweiOBS":
+		// Huawei OBS PFS is not support listObjectV2, and if turn on the urlEncodeListing, marker will not work and keep list same page forever.
+		urlEncodeListings = false
+		listObjectsV2 = false
 	case "Ceph":
+		listObjectsV2 = false
+		virtualHostStyle = false
+		urlEncodeListings = false
+	case "ChinaMobile":
+		listObjectsV2 = false
+		virtualHostStyle = false
+		urlEncodeListings = false
+	case "Cloudflare":
+		virtualHostStyle = false
+		useMultipartEtag = false // currently multipart Etags are random
+	case "ArvanCloud":
 		listObjectsV2 = false
 		virtualHostStyle = false
 		urlEncodeListings = false
@@ -1915,13 +2379,18 @@ func setQuirks(opt *Options) {
 		listObjectsV2 = false // untested
 		virtualHostStyle = false
 		urlEncodeListings = false
+		useMultipartEtag = false // untested
+	case "LyveCloud":
+		useMultipartEtag = false // LyveCloud seems to calculate multipart Etags differently from AWS
 	case "Minio":
 		virtualHostStyle = false
 	case "Netease":
 		listObjectsV2 = false // untested
 		urlEncodeListings = false
+		useMultipartEtag = false // untested
 	case "RackCorp":
 		// No quirks
+		useMultipartEtag = false // untested
 	case "Scaleway":
 		// Scaleway can only have 1000 parts in an upload
 		if opt.MaxUploadParts > 1000 {
@@ -1932,23 +2401,32 @@ func setQuirks(opt *Options) {
 		listObjectsV2 = false // untested
 		virtualHostStyle = false
 		urlEncodeListings = false
+		useMultipartEtag = false // untested
 	case "StackPath":
 		listObjectsV2 = false // untested
 		virtualHostStyle = false
 		urlEncodeListings = false
+	case "Storj":
+		// Force chunk size to >= 64 MiB
+		if opt.ChunkSize < 64*fs.Mebi {
+			opt.ChunkSize = 64 * fs.Mebi
+		}
 	case "TencentCOS":
-		listObjectsV2 = false // untested
+		listObjectsV2 = false    // untested
+		useMultipartEtag = false // untested
 	case "Wasabi":
 		// No quirks
 	case "Other":
 		listObjectsV2 = false
 		virtualHostStyle = false
 		urlEncodeListings = false
+		useMultipartEtag = false
 	default:
 		fs.Logf("s3", "s3 provider %q not known - please set correctly", opt.Provider)
 		listObjectsV2 = false
 		virtualHostStyle = false
 		urlEncodeListings = false
+		useMultipartEtag = false
 	}
 
 	// Path Style vs Virtual Host style
@@ -1969,6 +2447,12 @@ func setQuirks(opt *Options) {
 		} else {
 			opt.ListVersion = 1
 		}
+	}
+
+	// Set the correct use multipart Etag for error checking if not manually set
+	if !opt.UseMultipartEtag.Valid {
+		opt.UseMultipartEtag.Valid = true
+		opt.UseMultipartEtag.Value = useMultipartEtag
 	}
 }
 
@@ -2006,7 +2490,7 @@ func NewFs(ctx context.Context, name, root string, m configmap.Mapper) (fs.Fs, e
 		opt.SSECustomerKeyMD5 = base64.StdEncoding.EncodeToString(md5sumBinary[:])
 	}
 	srv := getClient(ctx, opt)
-	c, ses, err := s3Connection(ctx, opt, srv)
+	c, cu, ses, err := s3Connection(ctx, opt, srv)
 	if err != nil {
 		return nil, err
 	}
@@ -2024,6 +2508,7 @@ func NewFs(ctx context.Context, name, root string, m configmap.Mapper) (fs.Fs, e
 		ci:      ci,
 		ctx:     ctx,
 		c:       c,
+		cu:      cu,
 		ses:     ses,
 		pacer:   pc,
 		cache:   bucket.NewCache(),
@@ -2069,6 +2554,11 @@ func NewFs(ctx context.Context, name, root string, m configmap.Mapper) (fs.Fs, e
 		}
 		// return an error with an fs which points to the parent
 		return f, fs.ErrorIsFile
+	}
+	if opt.Provider == "Storj" {
+		f.features.Copy = nil
+		f.features.SetTier = false
+		f.features.GetTier = false
 	}
 	// f.listMultipartUploads()
 	return f, nil
@@ -2142,11 +2632,12 @@ func (f *Fs) updateRegionForBucket(ctx context.Context, bucket string) error {
 	// Make a new session with the new region
 	oldRegion := f.opt.Region
 	f.opt.Region = region
-	c, ses, err := s3Connection(f.ctx, &f.opt, f.srv)
+	c, cu, ses, err := s3Connection(f.ctx, &f.opt, f.srv)
 	if err != nil {
 		return fmt.Errorf("creating new session failed: %w", err)
 	}
 	f.c = c
+	f.cu = cu
 	f.ses = ses
 
 	fs.Logf(f, "Switched region to %q from %q", region, oldRegion)
@@ -2286,9 +2777,7 @@ func (f *Fs) list(ctx context.Context, bucket, directory, prefix string, addBuck
 				if addBucket {
 					remote = path.Join(bucket, remote)
 				}
-				if strings.HasSuffix(remote, "/") {
-					remote = remote[:len(remote)-1]
-				}
+				remote = strings.TrimSuffix(remote, "/")
 				err = fn(remote, &s3.Object{Key: &remote}, true)
 				if err != nil {
 					return err
@@ -2589,7 +3078,7 @@ func (f *Fs) Precision() time.Duration {
 // pathEscape escapes s as for a URL path.  It uses rest.URLPathEscape
 // but also escapes '+' for S3 and Digital Ocean spaces compatibility
 func pathEscape(s string) string {
-	return strings.Replace(rest.URLPathEscape(s), "+", "%2B", -1)
+	return strings.ReplaceAll(rest.URLPathEscape(s), "+", "%2B")
 }
 
 // copy does a server-side copy
@@ -2962,6 +3451,10 @@ func (f *Fs) Command(ctx context.Context, name string, arg []string, opt map[str
 				st.Status = "Not an S3 object"
 				return
 			}
+			if o.storageClass != "GLACIER" && o.storageClass != "DEEP_ARCHIVE" {
+				st.Status = "Not GLACIER or DEEP_ARCHIVE storage class"
+				return
+			}
 			bucket, bucketPath := o.split()
 			reqCopy := req
 			reqCopy.Bucket = &bucket
@@ -3216,9 +3709,6 @@ func (o *Object) readMetaData(ctx context.Context) (err error) {
 	if err != nil {
 		return err
 	}
-	if resp.LastModified == nil {
-		fs.Logf(o, "Failed to read last modified from HEAD: %v", err)
-	}
 	o.setMetaData(resp.ETag, resp.ContentLength, resp.LastModified, resp.Metadata, resp.ContentType, resp.StorageClass)
 	return nil
 }
@@ -3248,6 +3738,7 @@ func (o *Object) setMetaData(etag *string, contentLength *int64, lastModified *t
 	o.storageClass = aws.StringValue(storageClass)
 	if lastModified == nil {
 		o.lastModified = time.Now()
+		fs.Logf(o, "Failed to read last modified")
 	} else {
 		o.lastModified = *lastModified
 	}
@@ -3419,9 +3910,7 @@ func (o *Object) Open(ctx context.Context, options ...fs.OpenOption) (in io.Read
 	if err != nil {
 		return nil, err
 	}
-	if resp.LastModified == nil {
-		fs.Logf(o, "Failed to read last modified: %v", err)
-	}
+
 	// read size from ContentLength or ContentRange
 	size := resp.ContentLength
 	if resp.ContentRange != nil {
@@ -3444,7 +3933,7 @@ func (o *Object) Open(ctx context.Context, options ...fs.OpenOption) (in io.Read
 
 var warnStreamUpload sync.Once
 
-func (o *Object) uploadMultipart(ctx context.Context, req *s3.PutObjectInput, size int64, in io.Reader) (err error) {
+func (o *Object) uploadMultipart(ctx context.Context, req *s3.PutObjectInput, size int64, in io.Reader) (etag string, err error) {
 	f := o.fs
 
 	// make concurrency machinery
@@ -3462,7 +3951,7 @@ func (o *Object) uploadMultipart(ctx context.Context, req *s3.PutObjectInput, si
 	}
 
 	// calculate size of parts
-	partSize := int(f.opt.ChunkSize)
+	partSize := f.opt.ChunkSize
 
 	// size can be -1 here meaning we don't know the size of the incoming file. We use ChunkSize
 	// buffers here (default 5 MiB). With a maximum number of parts (10,000) this will be a file of
@@ -3473,11 +3962,7 @@ func (o *Object) uploadMultipart(ctx context.Context, req *s3.PutObjectInput, si
 				f.opt.ChunkSize, fs.SizeSuffix(int64(partSize)*uploadParts))
 		})
 	} else {
-		// Adjust partSize until the number of parts is small enough.
-		if size/int64(partSize) >= uploadParts {
-			// Calculate partition size rounded up to the nearest MiB
-			partSize = int((((size / uploadParts) >> 20) + 1) << 20)
-		}
+		partSize = chunksize.Calculator(o, int(uploadParts), f.opt.ChunkSize)
 	}
 
 	memPool := f.getMemoryPool(int64(partSize))
@@ -3491,7 +3976,7 @@ func (o *Object) uploadMultipart(ctx context.Context, req *s3.PutObjectInput, si
 		return f.shouldRetry(ctx, err)
 	})
 	if err != nil {
-		return fmt.Errorf("multipart upload failed to initialise: %w", err)
+		return etag, fmt.Errorf("multipart upload failed to initialise: %w", err)
 	}
 	uid := cout.UploadId
 
@@ -3520,7 +4005,20 @@ func (o *Object) uploadMultipart(ctx context.Context, req *s3.PutObjectInput, si
 		partsMu  sync.Mutex // to protect parts
 		parts    []*s3.CompletedPart
 		off      int64
+		md5sMu   sync.Mutex
+		md5s     []byte
 	)
+
+	addMd5 := func(md5binary *[md5.Size]byte, partNum int64) {
+		md5sMu.Lock()
+		defer md5sMu.Unlock()
+		start := partNum * md5.Size
+		end := start + md5.Size
+		if extend := end - int64(len(md5s)); extend > 0 {
+			md5s = append(md5s, make([]byte, extend)...)
+		}
+		copy(md5s[start:end], (*md5binary)[:])
+	}
 
 	for partNum := int64(1); !finished; partNum++ {
 		// Get a block of memory from the pool and token which limits concurrency.
@@ -3551,7 +4049,7 @@ func (o *Object) uploadMultipart(ctx context.Context, req *s3.PutObjectInput, si
 			finished = true
 		} else if err != nil {
 			free()
-			return fmt.Errorf("multipart upload failed to read source: %w", err)
+			return etag, fmt.Errorf("multipart upload failed to read source: %w", err)
 		}
 		buf = buf[:n]
 
@@ -3564,6 +4062,7 @@ func (o *Object) uploadMultipart(ctx context.Context, req *s3.PutObjectInput, si
 
 			// create checksum of buffer for integrity checking
 			md5sumBinary := md5.Sum(buf)
+			addMd5(&md5sumBinary, partNum-1)
 			md5sum := base64.StdEncoding.EncodeToString(md5sumBinary[:])
 
 			err = f.pacer.Call(func() (bool, error) {
@@ -3605,7 +4104,7 @@ func (o *Object) uploadMultipart(ctx context.Context, req *s3.PutObjectInput, si
 	}
 	err = g.Wait()
 	if err != nil {
-		return err
+		return etag, err
 	}
 
 	// sort the completed parts by part number
@@ -3626,9 +4125,122 @@ func (o *Object) uploadMultipart(ctx context.Context, req *s3.PutObjectInput, si
 		return f.shouldRetry(ctx, err)
 	})
 	if err != nil {
-		return fmt.Errorf("multipart upload failed to finalise: %w", err)
+		return etag, fmt.Errorf("multipart upload failed to finalise: %w", err)
 	}
-	return nil
+	hashOfHashes := md5.Sum(md5s)
+	etag = fmt.Sprintf("%s-%d", hex.EncodeToString(hashOfHashes[:]), len(parts))
+	return etag, nil
+}
+
+// unWrapAwsError unwraps AWS errors, looking for a non AWS error
+//
+// It returns true if one was found and the error, or false and the
+// error passed in.
+func unWrapAwsError(err error) (found bool, outErr error) {
+	if awsErr, ok := err.(awserr.Error); ok {
+		var origErrs []error
+		if batchErr, ok := awsErr.(awserr.BatchError); ok {
+			origErrs = batchErr.OrigErrs()
+		} else {
+			origErrs = []error{awsErr.OrigErr()}
+		}
+		for _, origErr := range origErrs {
+			found, newErr := unWrapAwsError(origErr)
+			if found {
+				return found, newErr
+			}
+		}
+		return false, err
+	}
+	return true, err
+}
+
+// Upload a single part using PutObject
+func (o *Object) uploadSinglepartPutObject(ctx context.Context, req *s3.PutObjectInput, size int64, in io.Reader) (etag string, lastModified time.Time, err error) {
+	req.Body = readers.NewFakeSeeker(in, size)
+	var resp *s3.PutObjectOutput
+	err = o.fs.pacer.CallNoRetry(func() (bool, error) {
+		resp, err = o.fs.cu.PutObject(req)
+		return o.fs.shouldRetry(ctx, err)
+	})
+	if err != nil {
+		// Return the underlying error if we have a Serialization error if possible
+		//
+		// Serialization errors are synthesized locally in the SDK (not returned from the
+		// server). We'll get one if the SDK attempts a retry, however the FakeSeeker will
+		// remember the previous error from Read and return that.
+		if do, ok := err.(awserr.Error); ok && do.Code() == request.ErrCodeSerialization {
+			if found, newErr := unWrapAwsError(err); found {
+				err = newErr
+			}
+		}
+		return etag, lastModified, err
+	}
+	lastModified = time.Now()
+	etag = aws.StringValue(resp.ETag)
+	return etag, lastModified, nil
+}
+
+// Upload a single part using a presigned request
+func (o *Object) uploadSinglepartPresignedRequest(ctx context.Context, req *s3.PutObjectInput, size int64, in io.Reader) (etag string, lastModified time.Time, err error) {
+	// Create the request
+	putObj, _ := o.fs.c.PutObjectRequest(req)
+
+	// Sign it so we can upload using a presigned request.
+	//
+	// Note the SDK didn't used to support streaming to
+	// PutObject so we used this work-around.
+	url, headers, err := putObj.PresignRequest(15 * time.Minute)
+	if err != nil {
+		return etag, lastModified, fmt.Errorf("s3 upload: sign request: %w", err)
+	}
+
+	if o.fs.opt.V2Auth && headers == nil {
+		headers = putObj.HTTPRequest.Header
+	}
+
+	// Set request to nil if empty so as not to make chunked encoding
+	if size == 0 {
+		in = nil
+	}
+
+	// create the vanilla http request
+	httpReq, err := http.NewRequestWithContext(ctx, "PUT", url, in)
+	if err != nil {
+		return etag, lastModified, fmt.Errorf("s3 upload: new request: %w", err)
+	}
+
+	// set the headers we signed and the length
+	httpReq.Header = headers
+	httpReq.ContentLength = size
+
+	var resp *http.Response
+	err = o.fs.pacer.CallNoRetry(func() (bool, error) {
+		var err error
+		resp, err = o.fs.srv.Do(httpReq)
+		if err != nil {
+			return o.fs.shouldRetry(ctx, err)
+		}
+		body, err := rest.ReadBody(resp)
+		if err != nil {
+			return o.fs.shouldRetry(ctx, err)
+		}
+		if resp.StatusCode >= 200 && resp.StatusCode < 299 {
+			return false, nil
+		}
+		err = fmt.Errorf("s3 upload: %s: %s", resp.Status, body)
+		return fserrors.ShouldRetryHTTP(resp, retryErrorCodes), err
+	})
+	if err != nil {
+		return etag, lastModified, err
+	}
+	if resp != nil {
+		if date, err := http.ParseTime(resp.Header.Get("Date")); err != nil {
+			lastModified = date
+		}
+		etag = resp.Header.Get("Etag")
+	}
+	return etag, lastModified, nil
 }
 
 // Update the Object from in with modTime and size
@@ -3654,19 +4266,20 @@ func (o *Object) Update(ctx context.Context, in io.Reader, src fs.ObjectInfo, op
 	//    - so we can add the md5sum in the metadata as metaMD5Hash if using SSE/SSE-C
 	// - for multipart provided checksums aren't disabled
 	//    - so we can add the md5sum in the metadata as metaMD5Hash
-	var md5sum string
+	var md5sumBase64 string
+	var md5sumHex string
 	if !multipart || !o.fs.opt.DisableChecksum {
-		hash, err := src.Hash(ctx, hash.MD5)
-		if err == nil && matchMd5.MatchString(hash) {
-			hashBytes, err := hex.DecodeString(hash)
+		md5sumHex, err = src.Hash(ctx, hash.MD5)
+		if err == nil && matchMd5.MatchString(md5sumHex) {
+			hashBytes, err := hex.DecodeString(md5sumHex)
 			if err == nil {
-				md5sum = base64.StdEncoding.EncodeToString(hashBytes)
+				md5sumBase64 = base64.StdEncoding.EncodeToString(hashBytes)
 				if (multipart || o.fs.etagIsNotMD5) && !o.fs.opt.DisableChecksum {
 					// Set the md5sum as metadata on the object if
 					// - a multipart upload
 					// - the Etag is not an MD5, eg when using SSE/SSE-C
 					// provided checksums aren't disabled
-					metadata[metaMD5Hash] = &md5sum
+					metadata[metaMD5Hash] = &md5sumBase64
 				}
 			}
 		}
@@ -3681,8 +4294,11 @@ func (o *Object) Update(ctx context.Context, in io.Reader, src fs.ObjectInfo, op
 		ContentType: &mimeType,
 		Metadata:    metadata,
 	}
-	if md5sum != "" {
-		req.ContentMD5 = &md5sum
+	if size >= 0 {
+		req.ContentLength = &size
+	}
+	if md5sumBase64 != "" {
+		req.ContentMD5 = &md5sumBase64
 	}
 	if o.fs.opt.RequesterPays {
 		req.RequestPayer = aws.String(s3.RequestPayerRequester)
@@ -3735,89 +4351,56 @@ func (o *Object) Update(ctx context.Context, in io.Reader, src fs.ObjectInfo, op
 		}
 	}
 
-	var resp *http.Response // response from PUT
+	var wantETag string        // Multipart upload Etag to check
+	var gotEtag string         // Etag we got from the upload
+	var lastModified time.Time // Time we got from the upload
 	if multipart {
-		err = o.uploadMultipart(ctx, &req, size, in)
-		if err != nil {
-			return err
-		}
+		wantETag, err = o.uploadMultipart(ctx, &req, size, in)
 	} else {
-
-		// Create the request
-		putObj, _ := o.fs.c.PutObjectRequest(&req)
-
-		// Sign it so we can upload using a presigned request.
-		//
-		// Note the SDK doesn't currently support streaming to
-		// PutObject so we'll use this work-around.
-		url, headers, err := putObj.PresignRequest(15 * time.Minute)
-		if err != nil {
-			return fmt.Errorf("s3 upload: sign request: %w", err)
+		if o.fs.opt.UsePresignedRequest {
+			gotEtag, lastModified, err = o.uploadSinglepartPresignedRequest(ctx, &req, size, in)
+		} else {
+			gotEtag, lastModified, err = o.uploadSinglepartPutObject(ctx, &req, size, in)
 		}
-
-		if o.fs.opt.V2Auth && headers == nil {
-			headers = putObj.HTTPRequest.Header
-		}
-
-		// Set request to nil if empty so as not to make chunked encoding
-		if size == 0 {
-			in = nil
-		}
-
-		// create the vanilla http request
-		httpReq, err := http.NewRequestWithContext(ctx, "PUT", url, in)
-		if err != nil {
-			return fmt.Errorf("s3 upload: new request: %w", err)
-		}
-
-		// set the headers we signed and the length
-		httpReq.Header = headers
-		httpReq.ContentLength = size
-
-		err = o.fs.pacer.CallNoRetry(func() (bool, error) {
-			var err error
-			resp, err = o.fs.srv.Do(httpReq)
-			if err != nil {
-				return o.fs.shouldRetry(ctx, err)
-			}
-			body, err := rest.ReadBody(resp)
-			if err != nil {
-				return o.fs.shouldRetry(ctx, err)
-			}
-			if resp.StatusCode >= 200 && resp.StatusCode < 299 {
-				return false, nil
-			}
-			err = fmt.Errorf("s3 upload: %s: %s", resp.Status, body)
-			return fserrors.ShouldRetryHTTP(resp, retryErrorCodes), err
-		})
-		if err != nil {
-			return err
-		}
+	}
+	if err != nil {
+		return err
 	}
 
 	// User requested we don't HEAD the object after uploading it
 	// so make up the object as best we can assuming it got
 	// uploaded properly. If size < 0 then we need to do the HEAD.
 	if o.fs.opt.NoHead && size >= 0 {
-		o.md5 = md5sum
+		o.md5 = md5sumHex
 		o.bytes = size
 		o.lastModified = time.Now()
 		o.meta = req.Metadata
 		o.mimeType = aws.StringValue(req.ContentType)
 		o.storageClass = aws.StringValue(req.StorageClass)
 		// If we have done a single part PUT request then we can read these
-		if resp != nil {
-			if date, err := http.ParseTime(resp.Header.Get("Date")); err == nil {
-				o.lastModified = date
-			}
-			o.setMD5FromEtag(resp.Header.Get("Etag"))
+		if gotEtag != "" {
+			o.setMD5FromEtag(gotEtag)
+		}
+		if !o.lastModified.IsZero() {
+			o.lastModified = lastModified
 		}
 		return nil
 	}
 
 	// Read the metadata from the newly created object
 	o.meta = nil // wipe old metadata
-	err = o.readMetaData(ctx)
+	head, err := o.headObject(ctx)
+	if err != nil {
+		return err
+	}
+	o.setMetaData(head.ETag, head.ContentLength, head.LastModified, head.Metadata, head.ContentType, head.StorageClass)
+	if o.fs.opt.UseMultipartEtag.Value && !o.fs.etagIsNotMD5 && wantETag != "" && head.ETag != nil && *head.ETag != "" {
+		gotETag := strings.Trim(strings.ToLower(*head.ETag), `"`)
+		if wantETag != gotETag {
+			return fmt.Errorf("multipart upload corrupted: Etag differ: expecting %s but got %s", wantETag, gotETag)
+		}
+		fs.Debugf(o, "Multipart upload Etag: %s OK", wantETag)
+	}
 	return err
 }
 

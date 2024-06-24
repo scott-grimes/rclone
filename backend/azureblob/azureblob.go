@@ -26,6 +26,7 @@ import (
 	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/Azure/go-autorest/autorest/adal"
 	"github.com/rclone/rclone/fs"
+	"github.com/rclone/rclone/fs/chunksize"
 	"github.com/rclone/rclone/fs/config"
 	"github.com/rclone/rclone/fs/config/configmap"
 	"github.com/rclone/rclone/fs/config/configstruct"
@@ -43,8 +44,9 @@ import (
 const (
 	minSleep              = 10 * time.Millisecond
 	maxSleep              = 10 * time.Second
-	decayConstant         = 1    // bigger for slower decay, exponential
-	maxListChunkSize      = 5000 // number of items to read at once
+	decayConstant         = 1     // bigger for slower decay, exponential
+	maxListChunkSize      = 5000  // number of items to read at once
+	maxUploadParts        = 50000 // maximum allowed number of parts/blocks in a multi-part upload
 	modTimeKey            = "mtime"
 	timeFormatIn          = time.RFC3339
 	timeFormatOut         = "2006-01-02T15:04:05.000000000Z07:00"
@@ -371,15 +373,9 @@ func (o *Object) split() (container, containerPath string) {
 
 // validateAccessTier checks if azureblob supports user supplied tier
 func validateAccessTier(tier string) bool {
-	switch tier {
-	case string(azblob.AccessTierHot),
-		string(azblob.AccessTierCool),
-		string(azblob.AccessTierArchive):
-		// valid cases
-		return true
-	default:
-		return false
-	}
+	return strings.EqualFold(tier, string(azblob.AccessTierHot)) ||
+		strings.EqualFold(tier, string(azblob.AccessTierCool)) ||
+		strings.EqualFold(tier, string(azblob.AccessTierArchive))
 }
 
 // validatePublicAccess checks if azureblob supports use supplied public access level
@@ -612,7 +608,7 @@ func NewFs(ctx context.Context, name, root string, m configmap.Mapper) (fs.Fs, e
 		serviceURL = azblob.NewServiceURL(*u, pipeline)
 	case opt.UseMSI:
 		var token adal.Token
-		var userMSI *userMSI = &userMSI{}
+		var userMSI = &userMSI{}
 		if len(opt.MSIClientID) > 0 || len(opt.MSIObjectID) > 0 || len(opt.MSIResourceID) > 0 {
 			// Specifying a user-assigned identity. Exactly one of the above IDs must be specified.
 			// Validate and ensure exactly one is set. (To do: better validation.)
@@ -1689,8 +1685,17 @@ func (o *Object) Update(ctx context.Context, in io.Reader, src fs.ObjectInfo, op
 		}
 	}
 
+	uploadParts := int64(maxUploadParts)
+	if uploadParts < 1 {
+		uploadParts = 1
+	} else if uploadParts > maxUploadParts {
+		uploadParts = maxUploadParts
+	}
+	// calculate size of parts/blocks
+	partSize := chunksize.Calculator(o, int(uploadParts), o.fs.opt.ChunkSize)
+
 	putBlobOptions := azblob.UploadStreamToBlockBlobOptions{
-		BufferSize:      int(o.fs.opt.ChunkSize),
+		BufferSize:      int(partSize),
 		MaxBuffers:      o.fs.opt.UploadConcurrency,
 		Metadata:        o.meta,
 		BlobHTTPHeaders: httpHeaders,
@@ -1758,7 +1763,7 @@ func (o *Object) SetTier(tier string) error {
 	blob := o.getBlobReference()
 	ctx := context.Background()
 	err := o.fs.pacer.Call(func() (bool, error) {
-		_, err := blob.SetTier(ctx, desiredAccessTier, azblob.LeaseAccessConditions{})
+		_, err := blob.SetTier(ctx, desiredAccessTier, azblob.LeaseAccessConditions{}, azblob.RehydratePriorityStandard)
 		return o.fs.shouldRetry(ctx, err)
 	})
 

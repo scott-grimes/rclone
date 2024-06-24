@@ -202,7 +202,11 @@ func (f *Fs) wrapEntries(baseEntries fs.DirEntries) (hashEntries fs.DirEntries, 
 	for _, entry := range baseEntries {
 		switch x := entry.(type) {
 		case fs.Object:
-			hashEntries = append(hashEntries, f.wrapObject(x, nil))
+			obj, err := f.wrapObject(x, nil)
+			if err != nil {
+				return nil, err
+			}
+			hashEntries = append(hashEntries, obj)
 		default:
 			hashEntries = append(hashEntries, entry) // trash in - trash out
 		}
@@ -251,7 +255,7 @@ func (f *Fs) PutStream(ctx context.Context, in io.Reader, src fs.ObjectInfo, opt
 	if do := f.Fs.Features().PutStream; do != nil {
 		_ = f.pruneHash(src.Remote())
 		oResult, err := do(ctx, in, src, options...)
-		return f.wrapObject(oResult, err), err
+		return f.wrapObject(oResult, err)
 	}
 	return nil, errors.New("PutStream not supported")
 }
@@ -261,7 +265,7 @@ func (f *Fs) PutUnchecked(ctx context.Context, in io.Reader, src fs.ObjectInfo, 
 	if do := f.Fs.Features().PutUnchecked; do != nil {
 		_ = f.pruneHash(src.Remote())
 		oResult, err := do(ctx, in, src, options...)
-		return f.wrapObject(oResult, err), err
+		return f.wrapObject(oResult, err)
 	}
 	return nil, errors.New("PutUnchecked not supported")
 }
@@ -278,7 +282,7 @@ func (f *Fs) CleanUp(ctx context.Context) error {
 	if do := f.Fs.Features().CleanUp; do != nil {
 		return do(ctx)
 	}
-	return errors.New("CleanUp not supported")
+	return errors.New("not supported by underlying remote")
 }
 
 // About gets quota information from the Fs
@@ -286,7 +290,7 @@ func (f *Fs) About(ctx context.Context) (*fs.Usage, error) {
 	if do := f.Fs.Features().About; do != nil {
 		return do(ctx)
 	}
-	return nil, errors.New("About not supported")
+	return nil, errors.New("not supported by underlying remote")
 }
 
 // ChangeNotify calls the passed function with a path that has had changes.
@@ -348,7 +352,7 @@ func (f *Fs) Copy(ctx context.Context, src fs.Object, remote string) (fs.Object,
 		return nil, fs.ErrorCantCopy
 	}
 	oResult, err := do(ctx, o.Object, remote)
-	return f.wrapObject(oResult, err), err
+	return f.wrapObject(oResult, err)
 }
 
 // Move src to this remote using server-side move operations.
@@ -371,7 +375,7 @@ func (f *Fs) Move(ctx context.Context, src fs.Object, remote string) (fs.Object,
 		dir: false,
 		fs:  f,
 	})
-	return f.wrapObject(oResult, nil), nil
+	return f.wrapObject(oResult, nil)
 }
 
 // DirMove moves src, srcRemote to this remote at dstRemote using server-side move operations.
@@ -410,7 +414,7 @@ func (f *Fs) Shutdown(ctx context.Context) (err error) {
 // NewObject finds the Object at remote.
 func (f *Fs) NewObject(ctx context.Context, remote string) (fs.Object, error) {
 	o, err := f.Fs.NewObject(ctx, remote)
-	return f.wrapObject(o, err), err
+	return f.wrapObject(o, err)
 }
 
 //
@@ -424,11 +428,15 @@ type Object struct {
 }
 
 // Wrap base object into hasher object
-func (f *Fs) wrapObject(o fs.Object, err error) *Object {
-	if err != nil || o == nil {
-		return nil
+func (f *Fs) wrapObject(o fs.Object, err error) (obj fs.Object, outErr error) {
+	// log.Trace(o, "err=%v", err)("obj=%#v, outErr=%v", &obj, &outErr)
+	if err != nil {
+		return nil, err
 	}
-	return &Object{Object: o, f: f}
+	if o == nil {
+		return nil, fs.ErrorObjectNotFound
+	}
+	return &Object{Object: o, f: f}, nil
 }
 
 // Fs returns read only access to the Fs that this object is part of

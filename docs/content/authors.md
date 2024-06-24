@@ -557,3 +557,56 @@ put them back in again.` >}}
   * Logeshwaran Murugesan <logeshwaran@testpress.in>
   * Lu Wang <coolwanglu@gmail.com>
   * Bumsu Hyeon <ksitht@gmail.com>
+  * Shmz Ozggrn <98463324+ShmzOzggrn@users.noreply.github.com>
+  * Kim <kim@jotta.no>
+  * Niels van de Weem <n.van.de.weem@smile.nl>
+  * Koopa <codingkoopa@gmail.com>
+  * Yunhai Luo <yunhai-luo@hotmail.com>
+  * Charlie Jiang <w@chariri.moe>
+  * Alain Nussbaumer <alain.nussbaumer@alleluia.ch>
+  * Vanessasaurus <814322+vsoch@users.noreply.github.com>
+  * Isaac Levy <isaac.r.levy@gmail.com>
+  * Gourav T <workflowautomation@protonmail.com>
+  * Paulo Martins <paulo.pontes.m@gmail.com>
+  * viveknathani <viveknathani2402@gmail.com>
+  * Eng Zer Jun <engzerjun@gmail.com>
+  * Abhiraj <abhiraj.official15@gmail.com>
+  * Márton Elek <elek@apache.org> <elek@users.noreply.github.com>
+  * Vincent Murphy <vdm@vdm.ie>
+  * ctrl-q <34975747+ctrl-q@users.noreply.github.com>
+  * Nil Alexandrov <nalexand@akamai.com>
+  * GuoXingbin <101376330+guoxingbin@users.noreply.github.com>
+  * Berkan Teber <berkan@berkanteber.com>
+  * Tobias Klauser <tklauser@distanz.ch>
+  * KARBOWSKI Piotr <piotr.karbowski@gmail.com>
+  * GH <geeklihui@foxmail.com>
+  * rafma0 <int.main@gmail.com>
+  * Adrien Rey-Jarthon <jobs@adrienjarthon.com>
+  * Nick Gooding <73336146+nickgooding@users.noreply.github.com>
+  * Leroy van Logchem <lr.vanlogchem@gmail.com>
+  * Zsolt Ero <zsolt.ero@gmail.com>
+  * Lesmiscore <nao20010128@gmail.com>
+  * ehsantdy <ehsan.tadayon@arvancloud.com>
+  * SwazRGB <65694696+swazrgb@users.noreply.github.com>
+  * Mateusz Puczyński <mati6095@gmail.com>
+  * Michael C Tiernan - MIT-Research Computing Project <mtiernan@mit.edu>
+  * Kaspian <34658474+KaspianDev@users.noreply.github.com>
+  * Werner <EvilOlaf@users.noreply.github.com>
+  * Hugal31 <hugo.laloge@gmail.com>
+  * Christian Galo <36752715+cgalo5758@users.noreply.github.com>
+  * Erik van Velzen <erik@evanv.nl>
+  * Derek Battams <derek@battams.ca>
+  * SimonLiu <simonliu009@users.noreply.github.com>
+  * Hugo Laloge <hla@lescompanions.com>
+  * Mr-Kanister <68117355+Mr-Kanister@users.noreply.github.com>
+  * Rob Pickerill <r.pickerill@gmail.com>
+  * Andrey <to.merge@gmail.com>
+  * Eric Wolf <19wolf@gmail.com>
+  * Nick <nick.naumann@mailbox.tu-dresden.de>
+  * Jason Zheng <jszheng17@gmail.com>
+  * Matthew Vernon <mvernon@wikimedia.org>
+  * Noah Hsu <i@nn.ci>
+  * m00594701 <mengpengbo@huawei.com>
+  * Art M. Gallagher <artmg50@gmail.com>
+  * Sven Gerber <49589423+svengerber@users.noreply.github.com>
+  * CrossR <r.cross@lancaster.ac.uk>

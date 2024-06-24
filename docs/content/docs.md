@@ -28,6 +28,7 @@ option:
 See the following for detailed instructions for
 
   * [1Fichier](/fichier/)
+  * [Akamai Netstorage](/netstorage/)
   * [Alias](/alias/)
   * [Amazon Drive](/amazonclouddrive/)
   * [Amazon S3](/s3/)
@@ -36,8 +37,10 @@ See the following for detailed instructions for
   * [Chunker](/chunker/) - transparently splits large files for other remotes
   * [Citrix ShareFile](/sharefile/)
   * [Compress](/compress/)
+  * [Combine](/combine/)
   * [Crypt](/crypt/) - to encrypt other remotes
   * [DigitalOcean Spaces](/s3/#digitalocean-spaces)
+  * [Digi Storage](/koofr/#digi-storage)
   * [Dropbox](/dropbox/)
   * [Enterprise File Fabric](/filefabric/)
   * [FTP](/ftp/)
@@ -48,6 +51,7 @@ See the following for detailed instructions for
   * [HDFS](/hdfs/)
   * [HTTP](/http/)
   * [Hubic](/hubic/)
+  * [Internet Archive](/internetarchive/)
   * [Jottacloud](/jottacloud/)
   * [Koofr](/koofr/)
   * [Mail.ru Cloud](/mailru/)
@@ -64,8 +68,8 @@ See the following for detailed instructions for
   * [Seafile](/seafile/)
   * [SFTP](/sftp/)
   * [Sia](/sia/)
+  * [Storj](/storj/)
   * [SugarSync](/sugarsync/)
-  * [Tardigrade](/tardigrade/)
   * [Union](/union/)
   * [Uptobox](/uptobox/)
   * [WebDAV](/webdav/)
@@ -550,7 +554,7 @@ Is equivalent to this:
 
 Bandwidth limit apply to the data transfer for all backends. For most
 backends the directory listing bandwidth is also included (exceptions
-being the non HTTP backends, `ftp`, `sftp` and `tardigrade`).
+being the non HTTP backends, `ftp`, `sftp` and `storj`).
 
 Note that the units are **Byte/s**, not **bit/s**. Typically
 connections are measured in bit/s - to convert divide by 8. For
@@ -785,7 +789,9 @@ See `--compare-dest` and `--backup-dir`.
 
 ### --dedupe-mode MODE ###
 
-Mode to run dedupe command in.  One of `interactive`, `skip`, `first`, `newest`, `oldest`, `rename`.  The default is `interactive`.  See the dedupe command for more information as to what these options mean.
+Mode to run dedupe command in.  One of `interactive`, `skip`, `first`, 
+`newest`, `oldest`, `rename`.  The default is `interactive`.  
+See the dedupe command for more information as to what these options mean.
 
 ### --disable FEATURE,FEATURE,... ###
 
@@ -807,6 +813,12 @@ which feature does what.
 This flag can be useful for debugging and in exceptional circumstances
 (e.g. Google Drive limiting the total volume of Server Side Copies to
 100 GiB/day).
+
+### --disable-http2
+
+This stops rclone from trying to use HTTP/2 if available. This can
+sometimes speed up transfers due to a
+[problem in the Go standard library](https://github.com/golang/go/issues/37373).
 
 ### --dscp VALUE ###
 
@@ -931,22 +943,22 @@ unit prefix appended to the value (e.g. `9.762Ki`), while in more textual output
 the full unit is shown (e.g. `9.762 KiB`). For counts the SI standard notation is
 used, e.g. prefix `k` for kilo. Used with file counts, `1k` means 1000 files.
 
-The various [list](commands/rclone_ls/) commands output raw numbers by default.
+The various [list](/commands/rclone_ls/) commands output raw numbers by default.
 Option `--human-readable` will make them output values in human-readable format
 instead (with the short unit prefix).
 
-The [about](commands/rclone_about/) command outputs human-readable by default,
+The [about](/commands/rclone_about/) command outputs human-readable by default,
 with a command-specific option `--full` to output the raw numbers instead.
 
-Command [size](commands/rclone_size/) outputs both human-readable and raw numbers
+Command [size](/commands/rclone_size/) outputs both human-readable and raw numbers
 in the same output.
 
-The [tree](commands/rclone_tree/) command also considers `--human-readable`, but
+The [tree](/commands/rclone_tree/) command also considers `--human-readable`, but
 it will not use the exact same notation as the other commands: It rounds to one
 decimal, and uses single letter suffix, e.g. `K` instead of `Ki`. The reason for
 this is that it relies on an external library.
 
-The interactive command [ncdu](commands/rclone_ncdu/) shows human-readable by
+The interactive command [ncdu](/commands/rclone_ncdu/) shows human-readable by
 default, and responds to key `u` for toggling human-readable format.
 
 ### --ignore-case-sync ###
@@ -1077,7 +1089,12 @@ have a signal to rotate logs.
 
 ### --log-format LIST ###
 
-Comma separated list of log format options. Accepted options are `date`, `time`, `microseconds`, `pid`, `longfile`, `shortfile`, `UTC`. Any other keywords will be silently ignored. `pid` will tag log messages with process identifier which useful with `rclone mount --daemon`. Other accepted options are explained in the [go documentation](https://pkg.go.dev/log#pkg-constants). The default log format is "`date`,`time`".
+Comma separated list of log format options. Accepted options are `date`, 
+`time`, `microseconds`, `pid`, `longfile`, `shortfile`, `UTC`. Any other 
+keywords will be silently ignored. `pid` will tag log messages with process
+identifier which useful with `rclone mount --daemon`. Other accepted
+options are explained in the [go documentation](https://pkg.go.dev/log#pkg-constants).
+The default log format is "`date`,`time`".
 
 ### --log-level LEVEL ###
 
@@ -1645,8 +1662,7 @@ This can be very useful for `rclone mount` to control the behaviour of
 applications using it.
 
 This limit applies to all HTTP based backends and to the FTP and SFTP
-backends. It does not apply to the local backend or the Tardigrade
-backend.
+backends. It does not apply to the local backend or the Storj backend.
 
 See also `--tpslimit-burst`.
 
@@ -1786,29 +1802,37 @@ of timeouts or bigger if you have lots of bandwidth and a fast remote.
 
 The default is to run 4 file transfers in parallel.
 
+Look at --multi-thread-streams if you would like to control single file transfers.
+
 ### -u, --update ###
 
 This forces rclone to skip any files which exist on the destination
 and have a modified time that is newer than the source file.
 
-This can be useful when transferring to a remote which doesn't support
-mod times directly (or when using `--use-server-modtime` to avoid extra
-API calls) as it is more accurate than a `--size-only` check and faster
-than using `--checksum`.
+This can be useful in avoiding needless transfers when transferring to
+a remote which doesn't support modification times directly (or when
+using `--use-server-modtime` to avoid extra API calls) as it is more
+accurate than a `--size-only` check and faster than using
+`--checksum`. On such remotes (or when using `--use-server-modtime`)
+the time checked will be the uploaded time.
+
+If an existing destination file has a modification time older than the
+source file's, it will be updated if the sizes are different. If the
+sizes are the same, it will be updated if the checksum is different or
+not available.
 
 If an existing destination file has a modification time equal (within
-the computed modify window precision) to the source file's, it will be
-updated if the sizes are different.  If `--checksum` is set then
-rclone will update the destination if the checksums differ too.
+the computed modify window) to the source file's, it will be updated
+if the sizes are different. The checksum will not be checked in this
+case unless the `--checksum` flag is provided.
 
-If an existing destination file is older than the source file then
-it will be updated if the size or checksum differs from the source file.
+In all other cases the file will not be updated.
 
-On remotes which don't support mod time directly (or when using
-`--use-server-modtime`) the time checked will be the uploaded time.
-This means that if uploading to one of these remotes, rclone will skip
-any files which exist on the destination and have an uploaded time that
-is newer than the modification time of the source file.
+Consider using the `--modify-window` flag to compensate for time skews
+between the source and the backend, for backends that do not support
+mod times, and instead use uploaded times. However, if the backend
+does not support checksums, note that sync'ing or copying within the
+time skew window may still result in additional transfers for safety.
 
 ### --use-mmap ###
 
@@ -1850,6 +1874,9 @@ a small number of significant events.
 With `-vv` rclone will become very verbose telling you about every
 file it considers and transfers.  Please send bug reports with a log
 with this setting.
+
+When setting verbosity as an environment variable, use
+`RCLONE_VERBOSE=1` or `RCLONE_VERBOSE=2` for `-v` and `-vv` respectively.
 
 ### -V, --version ###
 
@@ -2109,6 +2136,7 @@ For the filtering options
   * `--filter-from`
   * `--exclude`
   * `--exclude-from`
+  * `--exclude-if-present`
   * `--include`
   * `--include-from`
   * `--files-from`
@@ -2215,6 +2243,10 @@ override the environment variable setting.
 
 Or to always use the trash in drive `--drive-use-trash`, set
 `RCLONE_DRIVE_USE_TRASH=true`.
+
+Verbosity is slightly different, the environment variable 
+equivalent of `--verbose` or `-v` is `RCLONE_VERBOSE=1`, 
+or for `-vv`, `RCLONE_VERBOSE=2`.
 
 The same parser is used for the options and the environment variables
 so they take exactly the same form.

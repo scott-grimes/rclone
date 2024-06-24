@@ -18,6 +18,7 @@ import (
 	"mime"
 	"net/http"
 	"path"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -70,7 +71,7 @@ const (
 	// 1<<18 is the minimum size supported by the Google uploader, and there is no maximum.
 	minChunkSize     = fs.SizeSuffix(googleapi.MinUploadChunkSize)
 	defaultChunkSize = 8 * fs.Mebi
-	partialFields    = "id,name,size,md5Checksum,trashed,explicitlyTrashed,modifiedTime,createdTime,mimeType,parents,webViewLink,shortcutDetails,exportLinks"
+	partialFields    = "id,name,size,md5Checksum,trashed,explicitlyTrashed,modifiedTime,createdTime,mimeType,parents,webViewLink,shortcutDetails,exportLinks,resourceKey"
 	listRGrouping    = 50   // number of IDs to search at once when using ListR
 	listRInputBuffer = 1000 // size of input buffer when using ListR
 	defaultXDGIcon   = "text-html"
@@ -84,7 +85,7 @@ var (
 		Endpoint:     google.Endpoint,
 		ClientID:     rcloneClientID,
 		ClientSecret: obscure.MustReveal(rcloneEncryptedClientSecret),
-		RedirectURL:  oauthutil.TitleBarRedirectURL,
+		RedirectURL:  oauthutil.RedirectURL,
 	}
 	_mimeTypeToExtensionDuplicates = map[string]string{
 		"application/x-vnd.oasis.opendocument.presentation": ".odp",
@@ -298,6 +299,17 @@ a non root folder as its starting point.
 			Name:     "use_trash",
 			Default:  true,
 			Help:     "Send files to the trash instead of deleting permanently.\n\nDefaults to true, namely sending files to the trash.\nUse `--drive-use-trash=false` to delete files permanently instead.",
+			Advanced: true,
+		}, {
+			Name:    "copy_shortcut_content",
+			Default: false,
+			Help: `Server side copy contents of shortcuts instead of the shortcut.
+
+When doing server side copies, normally rclone will copy shortcuts as
+shortcuts.
+
+If this flag is used then rclone will copy the contents of shortcuts
+rather than shortcuts themselves when doing server side copies.`,
 			Advanced: true,
 		}, {
 			Name:     "skip_gdocs",
@@ -546,6 +558,14 @@ If this flag is set then rclone will ignore shortcut files completely.
 			Advanced: true,
 			Default:  false,
 		}, {
+			Name: "skip_dangling_shortcuts",
+			Help: `If set skip dangling shortcut files.
+
+If this is set then rclone will not show any dangling shortcuts in listings.
+`,
+			Advanced: true,
+			Default:  false,
+		}, {
 			Name:     config.ConfigEncoding,
 			Help:     config.ConfigEncodingHelp,
 			Advanced: true,
@@ -578,6 +598,7 @@ type Options struct {
 	TeamDriveID               string               `config:"team_drive"`
 	AuthOwnerOnly             bool                 `config:"auth_owner_only"`
 	UseTrash                  bool                 `config:"use_trash"`
+	CopyShortcutContent       bool                 `config:"copy_shortcut_content"`
 	SkipGdocs                 bool                 `config:"skip_gdocs"`
 	SkipChecksumGphotos       bool                 `config:"skip_checksum_gphotos"`
 	SharedWithMe              bool                 `config:"shared_with_me"`
@@ -604,6 +625,7 @@ type Options struct {
 	StopOnUploadLimit         bool                 `config:"stop_on_upload_limit"`
 	StopOnDownloadLimit       bool                 `config:"stop_on_download_limit"`
 	SkipShortcuts             bool                 `config:"skip_shortcuts"`
+	SkipDanglingShortcuts     bool                 `config:"skip_dangling_shortcuts"`
 	Enc                       encoder.MultiEncoder `config:"encoding"`
 }
 
@@ -639,6 +661,7 @@ type baseObject struct {
 	mimeType     string   // The object MIME type
 	bytes        int64    // size of the object
 	parents      []string // IDs of the parent directories
+	resourceKey  *string  // resourceKey is needed for link shared objects
 }
 type documentObject struct {
 	baseObject
@@ -808,8 +831,8 @@ func (f *Fs) list(ctx context.Context, dirIDs []string, title string, directorie
 	if title != "" {
 		searchTitle := f.opt.Enc.FromStandardName(title)
 		// Escaping the backslash isn't documented but seems to work
-		searchTitle = strings.Replace(searchTitle, `\`, `\\`, -1)
-		searchTitle = strings.Replace(searchTitle, `'`, `\'`, -1)
+		searchTitle = strings.ReplaceAll(searchTitle, `\`, `\\`)
+		searchTitle = strings.ReplaceAll(searchTitle, `'`, `\'`)
 
 		var titleQuery bytes.Buffer
 		_, _ = fmt.Fprintf(&titleQuery, "(name='%s'", searchTitle)
@@ -905,6 +928,11 @@ OUTER:
 				item, err = f.resolveShortcut(ctx, item)
 				if err != nil {
 					return false, fmt.Errorf("list: %w", err)
+				}
+				// leave the dangling shortcut out of the listings
+				// we've already logged about the dangling shortcut in resolveShortcut
+				if f.opt.SkipDanglingShortcuts && item.MimeType == shortcutMimeTypeDangling {
+					continue
 				}
 			}
 			// Check the case of items is correct since
@@ -1293,12 +1321,16 @@ func (f *Fs) newRegularObject(remote string, info *drive.File) fs.Object {
 			}
 		}
 	}
-	return &Object{
+	o := &Object{
 		baseObject: f.newBaseObject(remote, info),
 		url:        fmt.Sprintf("%sfiles/%s?alt=media", f.svc.BasePath, actualID(info.Id)),
 		md5sum:     strings.ToLower(info.Md5Checksum),
 		v2Download: f.opt.V2DownloadMinSize != -1 && info.Size >= int64(f.opt.V2DownloadMinSize),
 	}
+	if info.ResourceKey != "" {
+		o.resourceKey = &info.ResourceKey
+	}
+	return o
 }
 
 // newDocumentObject creates an fs.Object for a google docs drive.File
@@ -1571,6 +1603,15 @@ func (f *Fs) findExportFormatByMimeType(ctx context.Context, itemMimeType string
 		}
 	}
 
+	// If using a link type export and a more specific export
+	// hasn't been found all docs should be exported
+	for _, _extension := range f.exportExtensions {
+		_mimeType := mime.TypeByExtension(_extension)
+		if isLinkMimeType(_mimeType) {
+			return _extension, _mimeType, true
+		}
+	}
+
 	// else return empty
 	return "", "", isDocument
 }
@@ -1581,6 +1622,14 @@ func (f *Fs) findExportFormatByMimeType(ctx context.Context, itemMimeType string
 // Look through the exportExtensions and find the first format that can be
 // converted.  If none found then return ("", "", "", false)
 func (f *Fs) findExportFormat(ctx context.Context, item *drive.File) (extension, filename, mimeType string, isDocument bool) {
+	// If item has MD5 sum it is a file stored on drive
+	if item.Md5Checksum != "" {
+		return
+	}
+	// Folders can't be documents
+	if item.MimeType == driveFolderType {
+		return
+	}
 	extension, mimeType, isDocument = f.findExportFormatByMimeType(ctx, item.MimeType)
 	if extension != "" {
 		filename = item.Name + extension
@@ -1971,7 +2020,7 @@ func splitID(compositeID string) (actualID, shortcutID string) {
 
 // isShortcutID returns true if compositeID refers to a shortcut
 func isShortcutID(compositeID string) bool {
-	return strings.IndexRune(compositeID, shortcutSeparator) >= 0
+	return strings.ContainsRune(compositeID, shortcutSeparator)
 }
 
 // actualID returns an actual ID from a composite ID
@@ -2374,16 +2423,24 @@ func (f *Fs) Copy(ctx context.Context, src fs.Object, remote string) (fs.Object,
 		createInfo.Description = ""
 	}
 
-	// get the ID of the thing to copy - this is the shortcut if available
+	// get the ID of the thing to copy
+	// copy the contents if CopyShortcutContent
+	// else copy the shortcut only
+
 	id := shortcutID(srcObj.id)
+
+	if f.opt.CopyShortcutContent {
+		id = actualID(srcObj.id)
+	}
 
 	var info *drive.File
 	err = f.pacer.Call(func() (bool, error) {
-		info, err = f.svc.Files.Copy(id, createInfo).
+		copy := f.svc.Files.Copy(id, createInfo).
 			Fields(partialFields).
 			SupportsAllDrives(true).
-			KeepRevisionForever(f.opt.KeepRevisionForever).
-			Context(ctx).Do()
+			KeepRevisionForever(f.opt.KeepRevisionForever)
+		srcObj.addResourceKey(copy.Header())
+		info, err = copy.Context(ctx).Do()
 		return f.shouldRetry(ctx, err)
 	})
 	if err != nil {
@@ -3185,7 +3242,7 @@ This will return a JSON list of objects like this
 
 With the -o config parameter it will output the list in a format
 suitable for adding to a config file to make aliases for all the
-drives found.
+drives found and a combined drive.
 
     [My Drive]
     type = alias
@@ -3195,10 +3252,15 @@ drives found.
     type = alias
     remote = drive,team_drive=0ABCDEFabcdefghijkl,root_folder_id=:
 
-Adding this to the rclone config file will cause those team drives to
-be accessible with the aliases shown. This may require manual editing
-of the names.
+    [AllDrives]
+    type = combine
+    remote = "My Drive=My Drive:" "Test Drive=Test Drive:"
 
+Adding this to the rclone config file will cause those team drives to
+be accessible with the aliases shown. Any illegal charactes will be
+substituted with "_" and duplicate names will have numbers suffixed.
+It will also add a remote called AllDrives which shows all the shared
+drives combined into one directory tree.
 `,
 }, {
 	Name:  "untrash",
@@ -3265,7 +3327,7 @@ func (f *Fs) Command(ctx context.Context, name string, arg []string, opt map[str
 			out["service_account_file"] = f.opt.ServiceAccountFile
 		}
 		if _, ok := opt["chunk_size"]; ok {
-			out["chunk_size"] = fmt.Sprintf("%s", f.opt.ChunkSize)
+			out["chunk_size"] = f.opt.ChunkSize.String()
 		}
 		return out, nil
 	case "set":
@@ -3282,11 +3344,11 @@ func (f *Fs) Command(ctx context.Context, name string, arg []string, opt map[str
 		}
 		if chunkSize, ok := opt["chunk_size"]; ok {
 			chunkSizeMap := make(map[string]string)
-			chunkSizeMap["previous"] = fmt.Sprintf("%s", f.opt.ChunkSize)
+			chunkSizeMap["previous"] = f.opt.ChunkSize.String()
 			if err = f.changeChunkSize(chunkSize); err != nil {
 				return out, err
 			}
-			chunkSizeString := fmt.Sprintf("%s", f.opt.ChunkSize)
+			chunkSizeString := f.opt.ChunkSize.String()
 			f.m.Set("chunk_size", chunkSizeString)
 			chunkSizeMap["current"] = chunkSizeString
 			out["chunk_size"] = chunkSizeMap
@@ -3314,14 +3376,30 @@ func (f *Fs) Command(ctx context.Context, name string, arg []string, opt map[str
 		if err != nil {
 			return nil, err
 		}
+		re := regexp.MustCompile(`[^\w_. -]+`)
 		if _, ok := opt["config"]; ok {
 			lines := []string{}
-			for _, drive := range drives {
+			upstreams := []string{}
+			names := make(map[string]struct{}, len(drives))
+			for i, drive := range drives {
+				name := re.ReplaceAllString(drive.Name, "_")
+				for {
+					if _, found := names[name]; !found {
+						break
+					}
+					name += fmt.Sprintf("-%d", i)
+				}
+				names[name] = struct{}{}
 				lines = append(lines, "")
-				lines = append(lines, fmt.Sprintf("[%s]", drive.Name))
-				lines = append(lines, fmt.Sprintf("type = alias"))
+				lines = append(lines, fmt.Sprintf("[%s]", name))
+				lines = append(lines, "type = alias")
 				lines = append(lines, fmt.Sprintf("remote = %s,team_drive=%s,root_folder_id=:", f.name, drive.Id))
+				upstreams = append(upstreams, fmt.Sprintf(`"%s=%s:"`, name, name))
 			}
+			lines = append(lines, "")
+			lines = append(lines, "[AllDrives]")
+			lines = append(lines, "type = combine")
+			lines = append(lines, fmt.Sprintf("upstreams = %s", strings.Join(upstreams, " ")))
 			return lines, nil
 		}
 		return drives, nil
@@ -3480,6 +3558,14 @@ func (o *baseObject) Storable() bool {
 	return true
 }
 
+// addResourceKey adds a X-Goog-Drive-Resource-Keys header for this
+// object if required.
+func (o *baseObject) addResourceKey(header http.Header) {
+	if o.resourceKey != nil {
+		header.Add("X-Goog-Drive-Resource-Keys", fmt.Sprintf("%s/%s", o.id, *o.resourceKey))
+	}
+}
+
 // httpResponse gets an http.Response object for the object
 // using the url and method passed in
 func (o *baseObject) httpResponse(ctx context.Context, url, method string, options []fs.OpenOption) (req *http.Request, res *http.Response, err error) {
@@ -3495,6 +3581,7 @@ func (o *baseObject) httpResponse(ctx context.Context, url, method string, optio
 		// Don't supply range requests for 0 length objects as they always fail
 		delete(req.Header, "Range")
 	}
+	o.addResourceKey(req.Header)
 	err = o.fs.pacer.Call(func() (bool, error) {
 		res, err = o.fs.client.Do(req)
 		if err == nil {

@@ -36,11 +36,15 @@ type RegInfo struct {
 	Options Options
 	// The command help, if any
 	CommandHelp []CommandHelp
+	// Aliases - other names this backend is known by
+	Aliases []string
+	// Hide - if set don't show in the configurator
+	Hide bool
 }
 
 // FileName returns the on disk file name for this backend
 func (ri *RegInfo) FileName() string {
-	return strings.Replace(ri.Name, " ", "", -1)
+	return strings.ReplaceAll(ri.Name, " ", "")
 }
 
 // Options is a slice of configuration Option for a backend
@@ -206,7 +210,7 @@ func (o *Option) Type() string {
 
 // FlagName for the option
 func (o *Option) FlagName(prefix string) string {
-	name := strings.Replace(o.Name, "_", "-", -1) // convert snake_case to kebab-case
+	name := strings.ReplaceAll(o.Name, "_", "-") // convert snake_case to kebab-case
 	if !o.NoPrefix {
 		name = prefix + "-" + name
 	}
@@ -256,6 +260,18 @@ func Register(info *RegInfo) {
 		info.Prefix = info.Name
 	}
 	Registry = append(Registry, info)
+	for _, alias := range info.Aliases {
+		// Copy the info block and rename and hide the alias and options
+		aliasInfo := *info
+		aliasInfo.Name = alias
+		aliasInfo.Prefix = alias
+		aliasInfo.Hide = true
+		aliasInfo.Options = append(Options(nil), info.Options...)
+		for i := range aliasInfo.Options {
+			aliasInfo.Options[i].Hide = OptionHideBoth
+		}
+		Registry = append(Registry, &aliasInfo)
+	}
 }
 
 // Find looks for a RegInfo object for the name passed in.  The name

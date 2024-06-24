@@ -796,6 +796,47 @@ func Overlapping(fdst, fsrc fs.Info) bool {
 	return strings.HasPrefix(fdstRoot, fsrcRoot) || strings.HasPrefix(fsrcRoot, fdstRoot)
 }
 
+// OverlappingFilterCheck returns true if fdst and fsrc point to the same
+// underlying Fs and they overlap without fdst being excluded by any filter rule.
+func OverlappingFilterCheck(ctx context.Context, fdst fs.Fs, fsrc fs.Fs) bool {
+	if !SameConfig(fdst, fsrc) {
+		return false
+	}
+	fdstRoot := fixRoot(fdst)
+	fsrcRoot := fixRoot(fsrc)
+	if strings.HasPrefix(fdstRoot, fsrcRoot) {
+		fdstRelative := fdstRoot[len(fsrcRoot):]
+		return filterCheckR(ctx, fdstRelative, 0, fsrc)
+	}
+	return strings.HasPrefix(fsrcRoot, fdstRoot)
+}
+
+// filterCheckR checks if fdst would be included in the sync
+func filterCheckR(ctx context.Context, fdstRelative string, pos int, fsrc fs.Fs) bool {
+	include := true
+	fi := filter.GetConfig(ctx)
+	includeDirectory := fi.IncludeDirectory(ctx, fsrc)
+	dirs := strings.SplitAfterN(fdstRelative, "/", pos+2)
+	newPath := ""
+	for i := 0; i <= pos; i++ {
+		newPath += dirs[i]
+	}
+	if !strings.HasSuffix(newPath, "/") {
+		newPath += "/"
+	}
+	if strings.HasPrefix(fdstRelative, newPath) {
+		include, _ = includeDirectory(newPath)
+		if include {
+			if newPath == fdstRelative {
+				return true
+			}
+			pos++
+			include = filterCheckR(ctx, fdstRelative, pos, fsrc)
+		}
+	}
+	return include
+}
+
 // SameDir returns true if fdst and fsrc point to the same
 // underlying Fs and they are the same directory.
 func SameDir(fdst, fsrc fs.Info) bool {
@@ -1070,11 +1111,13 @@ func HashSumStream(ht hash.Type, outputBase64 bool, in io.ReadCloser, w io.Write
 // Count counts the objects and their sizes in the Fs
 //
 // Obeys includes and excludes
-func Count(ctx context.Context, f fs.Fs) (objects int64, size int64, err error) {
+func Count(ctx context.Context, f fs.Fs) (objects int64, size int64, sizelessObjects int64, err error) {
 	err = ListFn(ctx, f, func(o fs.Object) {
 		atomic.AddInt64(&objects, 1)
 		objectSize := o.Size()
-		if objectSize > 0 {
+		if objectSize < 0 {
+			atomic.AddInt64(&sizelessObjects, 1)
+		} else if objectSize > 0 {
 			atomic.AddInt64(&size, objectSize)
 		}
 	})
@@ -1929,9 +1972,9 @@ func SetTier(ctx context.Context, fsrc fs.Fs, tier string) error {
 	})
 }
 
-// TouchDir touches every file in f with time t
-func TouchDir(ctx context.Context, f fs.Fs, t time.Time, recursive bool) error {
-	return walk.ListR(ctx, f, "", false, ConfigMaxDepth(ctx, recursive), walk.ListObjects, func(entries fs.DirEntries) error {
+// TouchDir touches every file in directory with time t
+func TouchDir(ctx context.Context, f fs.Fs, remote string, t time.Time, recursive bool) error {
+	return walk.ListR(ctx, f, remote, false, ConfigMaxDepth(ctx, recursive), walk.ListObjects, func(entries fs.DirEntries) error {
 		entries.ForObject(func(o fs.Object) {
 			if !SkipDestructive(ctx, o, "touch") {
 				fs.Debugf(f, "Touching %q", o.Remote())

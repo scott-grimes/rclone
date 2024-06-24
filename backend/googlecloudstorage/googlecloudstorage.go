@@ -24,6 +24,7 @@ import (
 	"path"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/rclone/rclone/fs"
@@ -65,7 +66,7 @@ var (
 		Endpoint:     google.Endpoint,
 		ClientID:     rcloneClientID,
 		ClientSecret: obscure.MustReveal(rcloneEncryptedClientSecret),
-		RedirectURL:  oauthutil.TitleBarRedirectURL,
+		RedirectURL:  oauthutil.RedirectURL,
 	}
 )
 
@@ -183,14 +184,29 @@ Docs: https://cloud.google.com/storage/docs/bucket-policy-only
 				Value: "asia-northeast1",
 				Help:  "Tokyo",
 			}, {
+				Value: "asia-northeast2",
+				Help:  "Osaka",
+			}, {
+				Value: "asia-northeast3",
+				Help:  "Seoul",
+			}, {
 				Value: "asia-south1",
 				Help:  "Mumbai",
+			}, {
+				Value: "asia-south2",
+				Help:  "Delhi",
 			}, {
 				Value: "asia-southeast1",
 				Help:  "Singapore",
 			}, {
+				Value: "asia-southeast2",
+				Help:  "Jakarta",
+			}, {
 				Value: "australia-southeast1",
 				Help:  "Sydney",
+			}, {
+				Value: "australia-southeast2",
+				Help:  "Melbourne",
 			}, {
 				Value: "europe-north1",
 				Help:  "Finland",
@@ -207,6 +223,12 @@ Docs: https://cloud.google.com/storage/docs/bucket-policy-only
 				Value: "europe-west4",
 				Help:  "Netherlands",
 			}, {
+				Value: "europe-west6",
+				Help:  "Zürich",
+			}, {
+				Value: "europe-central2",
+				Help:  "Warsaw",
+			}, {
 				Value: "us-central1",
 				Help:  "Iowa",
 			}, {
@@ -221,6 +243,33 @@ Docs: https://cloud.google.com/storage/docs/bucket-policy-only
 			}, {
 				Value: "us-west2",
 				Help:  "California",
+			}, {
+				Value: "us-west3",
+				Help:  "Salt Lake City",
+			}, {
+				Value: "us-west4",
+				Help:  "Las Vegas",
+			}, {
+				Value: "northamerica-northeast1",
+				Help:  "Montréal",
+			}, {
+				Value: "northamerica-northeast2",
+				Help:  "Toronto",
+			}, {
+				Value: "southamerica-east1",
+				Help:  "São Paulo",
+			}, {
+				Value: "southamerica-west1",
+				Help:  "Santiago",
+			}, {
+				Value: "asia1",
+				Help:  "Dual region: asia-northeast1 and asia-northeast2.",
+			}, {
+				Value: "eur4",
+				Help:  "Dual region: europe-north1 and europe-west4.",
+			}, {
+				Value: "nam4",
+				Help:  "Dual region: us-central1 and us-east1.",
 			}},
 		}, {
 			Name: "storage_class",
@@ -248,6 +297,30 @@ Docs: https://cloud.google.com/storage/docs/bucket-policy-only
 				Help:  "Durable reduced availability storage class",
 			}},
 		}, {
+			Name: "no_check_bucket",
+			Help: `If set, don't attempt to check the bucket exists or create it.
+
+This can be useful when trying to minimise the number of transactions
+rclone does if you know the bucket exists already.
+`,
+			Default:  false,
+			Advanced: true,
+		}, {
+			Name: "download_compressed",
+			Help: `If set this will download compressed objects as-is.
+
+It is possible to upload objects to GCS with "Content-Encoding: gzip"
+set. Normally rclone will transparently decompress these files on
+download. This means that rclone can't check the hash or the size of
+the file as both of these refer to the compressed object.
+
+If this flag is set then rclone will download files with
+"Content-Encoding: gzip" as they are received. This means that rclone
+can check the size and hash but the file contents will be compressed.
+`,
+			Advanced: true,
+			Default:  false,
+		}, {
 			Name:     config.ConfigEncoding,
 			Help:     config.ConfigEncodingHelp,
 			Advanced: true,
@@ -269,21 +342,24 @@ type Options struct {
 	BucketPolicyOnly          bool                 `config:"bucket_policy_only"`
 	Location                  string               `config:"location"`
 	StorageClass              string               `config:"storage_class"`
+	NoCheckBucket             bool                 `config:"no_check_bucket"`
+	DownloadCompressed        bool                 `config:"download_compressed"`
 	Enc                       encoder.MultiEncoder `config:"encoding"`
 }
 
 // Fs represents a remote storage server
 type Fs struct {
-	name          string           // name of this remote
-	root          string           // the path we are working on if any
-	opt           Options          // parsed options
-	features      *fs.Features     // optional features
-	svc           *storage.Service // the connection to the storage server
-	client        *http.Client     // authorized client
-	rootBucket    string           // bucket part of root (if any)
-	rootDirectory string           // directory part of root (if any)
-	cache         *bucket.Cache    // cache of bucket status
-	pacer         *fs.Pacer        // To pace the API calls
+	name           string           // name of this remote
+	root           string           // the path we are working on if any
+	opt            Options          // parsed options
+	features       *fs.Features     // optional features
+	svc            *storage.Service // the connection to the storage server
+	client         *http.Client     // authorized client
+	rootBucket     string           // bucket part of root (if any)
+	rootDirectory  string           // directory part of root (if any)
+	cache          *bucket.Cache    // cache of bucket status
+	pacer          *fs.Pacer        // To pace the API calls
+	warnCompressed sync.Once        // warn once about compressed files
 }
 
 // Object describes a storage object
@@ -297,6 +373,7 @@ type Object struct {
 	bytes    int64     // Bytes in the object
 	modTime  time.Time // Modified time of the object
 	mimeType string
+	gzipped  bool // set if object has Content-Encoding: gzip
 }
 
 // ------------------------------------------------------------
@@ -314,7 +391,7 @@ func (f *Fs) Root() string {
 // String converts this Fs to a string
 func (f *Fs) String() string {
 	if f.rootBucket == "" {
-		return fmt.Sprintf("GCS root")
+		return "GCS root"
 	}
 	if f.rootDirectory == "" {
 		return fmt.Sprintf("GCS bucket %s", f.rootBucket)
@@ -434,7 +511,7 @@ func NewFs(ctx context.Context, name, root string, m configmap.Mapper) (fs.Fs, e
 		name:  name,
 		root:  root,
 		opt:   *opt,
-		pacer: fs.NewPacer(ctx, pacer.NewGoogleDrive(pacer.MinSleep(minSleep))),
+		pacer: fs.NewPacer(ctx, pacer.NewS3(pacer.MinSleep(minSleep))),
 		cache: bucket.NewCache(),
 	}
 	f.setRoot(root)
@@ -792,6 +869,14 @@ func (f *Fs) makeBucket(ctx context.Context, bucket string) (err error) {
 	}, nil)
 }
 
+// checkBucket creates the bucket if it doesn't exist unless NoCheckBucket is true
+func (f *Fs) checkBucket(ctx context.Context, bucket string) error {
+	if f.opt.NoCheckBucket {
+		return nil
+	}
+	return f.makeBucket(ctx, bucket)
+}
+
 // Rmdir deletes the bucket if the fs is at the root
 //
 // Returns an error if it isn't empty: Error 409: The bucket you tried
@@ -825,7 +910,7 @@ func (f *Fs) Precision() time.Duration {
 // If it isn't possible then return fs.ErrorCantCopy
 func (f *Fs) Copy(ctx context.Context, src fs.Object, remote string) (fs.Object, error) {
 	dstBucket, dstPath := f.split(remote)
-	err := f.makeBucket(ctx, dstBucket)
+	err := f.checkBucket(ctx, dstBucket)
 	if err != nil {
 		return nil, err
 	}
@@ -909,6 +994,7 @@ func (o *Object) setMetaData(info *storage.Object) {
 	o.url = info.MediaLink
 	o.bytes = int64(info.Size)
 	o.mimeType = info.ContentType
+	o.gzipped = info.ContentEncoding == "gzip"
 
 	// Read md5sum
 	md5sumData, err := base64.StdEncoding.DecodeString(info.Md5Hash)
@@ -946,6 +1032,15 @@ func (o *Object) setMetaData(info *storage.Object) {
 		fs.Logf(o, "Bad time decode: %v", err)
 	} else {
 		o.modTime = modTime
+	}
+
+	// If gunzipping then size and md5sum are unknown
+	if o.gzipped && !o.fs.opt.DownloadCompressed {
+		o.bytes = -1
+		o.md5sum = ""
+		o.fs.warnCompressed.Do(func() {
+			fs.Logf(o.fs, "Decompressing 'Content-Encoding: gzip' compressed file. Use --gcs-download-compressed to override")
+		})
 	}
 }
 
@@ -1047,6 +1142,15 @@ func (o *Object) Open(ctx context.Context, options ...fs.OpenOption) (in io.Read
 		return nil, err
 	}
 	fs.FixRangeOption(options, o.bytes)
+	if o.gzipped && o.fs.opt.DownloadCompressed {
+		// Allow files which are stored on the cloud storage system
+		// compressed to be downloaded without being decompressed.  Note
+		// that setting this here overrides the automatic decompression
+		// in the Transport.
+		//
+		// See: https://cloud.google.com/storage/docs/transcoding
+		req.Header.Set("Accept-Encoding", "gzip")
+	}
 	fs.OpenOptionAddHTTPHeaders(req.Header, options)
 	var res *http.Response
 	err = o.fs.pacer.Call(func() (bool, error) {
@@ -1075,7 +1179,7 @@ func (o *Object) Open(ctx context.Context, options ...fs.OpenOption) (in io.Read
 // The new object may have been created if an error is returned
 func (o *Object) Update(ctx context.Context, in io.Reader, src fs.ObjectInfo, options ...fs.OpenOption) error {
 	bucket, bucketPath := o.split()
-	err := o.fs.makeBucket(ctx, bucket)
+	err := o.fs.checkBucket(ctx, bucket)
 	if err != nil {
 		return err
 	}

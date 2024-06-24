@@ -105,15 +105,20 @@ WebDAV or S3, that work out of the box.)
 
 {{< provider_list >}}
 {{< provider name="1Fichier" home="https://1fichier.com/" config="/fichier/" start="true">}}
+{{< provider name="Akamai Netstorage" home="https://www.akamai.com/us/en/products/media-delivery/netstorage.jsp" config="/netstorage/" >}}
 {{< provider name="Alibaba Cloud (Aliyun) Object Storage System (OSS)" home="https://www.alibabacloud.com/product/oss/" config="/s3/#alibaba-oss" >}}
 {{< provider name="Amazon Drive" home="https://www.amazon.com/clouddrive" config="/amazonclouddrive/" note="#status">}}
 {{< provider name="Amazon S3" home="https://aws.amazon.com/s3/" config="/s3/" >}}
 {{< provider name="Backblaze B2" home="https://www.backblaze.com/b2/cloud-storage.html" config="/b2/" >}}
 {{< provider name="Box" home="https://www.box.com/" config="/box/" >}}
 {{< provider name="Ceph" home="http://ceph.com/" config="/s3/#ceph" >}}
+{{< provider name="China Mobile Ecloud Elastic Object Storage (EOS)" home="https://ecloud.10086.cn/home/product-introduction/eos/" config="/s3/#china-mobile-ecloud-eos" >}}
+{{< provider name="Arvan Cloud Object Storage (AOS)" home="https://www.arvancloud.com/en/products/cloud-storage" config="/s3/#arvan-cloud-object-storage-aos" >}}
 {{< provider name="Citrix ShareFile" home="http://sharefile.com/" config="/sharefile/" >}}
-{{< provider name="C14" home="https://www.online.net/en/storage/c14-cold-storage" config="/sftp/#c14" >}}
+{{< provider name="C14" home="https://www.online.net/en/storage/c14-cold-storage" config="/s3/#scaleway" >}}
+{{< provider name="Cloudflare R2" home="https://blog.cloudflare.com/r2-open-beta/" config="/s3/#cloudflare-r2" >}}
 {{< provider name="DigitalOcean Spaces" home="https://www.digitalocean.com/products/object-storage/" config="/s3/#digitalocean-spaces" >}}
+{{< provider name="Digi Storage" home="https://storage.rcs-rds.ro/" config="/koofr/#digi-storage" >}}
 {{< provider name="Dreamhost" home="https://www.dreamhost.com/cloud/storage/" config="/s3/#dreamhost" >}}
 {{< provider name="Dropbox" home="https://www.dropbox.com/" config="/dropbox/" >}}
 {{< provider name="Enterprise File Fabric" home="https://storagemadeeasy.com/about/" config="/filefabric/" >}}
@@ -124,6 +129,7 @@ WebDAV or S3, that work out of the box.)
 {{< provider name="HDFS" home="https://hadoop.apache.org/" config="/hdfs/" >}}
 {{< provider name="HTTP" home="https://en.wikipedia.org/wiki/Hypertext_Transfer_Protocol" config="/http/" >}}
 {{< provider name="Hubic" home="https://hubic.com/" config="/hubic/" >}}
+{{< provider name="Internet Archive" home="https://archive.org/" config="/internetarchive/" >}}
 {{< provider name="Jottacloud" home="https://www.jottacloud.com/en/" config="/jottacloud/" >}}
 {{< provider name="IBM COS S3" home="http://www.ibm.com/cloud/object-storage" config="/s3/#ibm-cos-s3" >}}
 {{< provider name="Koofr" home="https://koofr.eu/" config="/koofr/" >}}
@@ -148,12 +154,13 @@ WebDAV or S3, that work out of the box.)
 {{< provider name="rsync.net" home="https://rsync.net/products/rclone.html" config="/sftp/#rsync-net" >}}
 {{< provider name="Scaleway" home="https://www.scaleway.com/object-storage/" config="/s3/#scaleway" >}}
 {{< provider name="Seafile" home="https://www.seafile.com/" config="/seafile/" >}}
+{{< provider name="Seagate Lyve Cloud" home="https://www.seagate.com/gb/en/services/cloud/storage/" config="/s3/#lyve" >}}
 {{< provider name="SeaweedFS" home="https://github.com/chrislusf/seaweedfs/" config="/s3/#seaweedfs" >}}
 {{< provider name="SFTP" home="https://en.wikipedia.org/wiki/SSH_File_Transfer_Protocol" config="/sftp/" >}}
 {{< provider name="Sia" home="https://sia.tech/" config="/sia/" >}}
 {{< provider name="StackPath" home="https://www.stackpath.com/products/object-storage/" config="/s3/#stackpath" >}}
+{{< provider name="Storj" home="https://storj.io/" config="/storj/" >}}
 {{< provider name="SugarSync" home="https://sugarsync.com/" config="/sugarsync/" >}}
-{{< provider name="Tardigrade" home="https://tardigrade.io/" config="/tardigrade/" >}}
 {{< provider name="Tencent Cloud Object Storage (COS)" home="https://intl.cloud.tencent.com/product/cos" config="/s3/#tencent-cos" >}}
 {{< provider name="Uptobox" home="https://uptobox.com" config="/uptobox/" >}}
 {{< provider name="Wasabi" home="https://wasabi.com/" config="/s3/#wasabi" >}}
@@ -163,7 +170,21 @@ WebDAV or S3, that work out of the box.)
 {{< provider name="The local filesystem" home="/local/" config="/local/" end="true">}}
 {{< /provider_list >}}
 
-Links
+## Virtual providers
+
+These backends adapt or modify other storage providers:
+
+{{< provider name="Alias: rename existing remotes" home="/alias/" config="/alias/" >}}
+{{< provider name="Cache: cache remotes (DEPRECATED)" home="/cache/" config="/cache/" >}}
+{{< provider name="Chunker: split large files" home="/chunker/" config="/chunker/" >}}
+{{< provider name="Combine: combine multiple remotes into a directory tree" home="/combine/" config="/combine/" >}}
+{{< provider name="Compress: compress files" home="/compress/" config="/compress/" >}}
+{{< provider name="Crypt: encrypt files" home="/crypt/" config="/crypt/" >}}
+{{< provider name="Hasher: hash files" home="/hasher/" config="/hasher/" >}}
+{{< provider name="Union: join multiple remotes to work together" home="/union/" config="/union/" >}}
+
+
+## Links
 
   * {{< icon "fa fa-home" >}} [Home page](https://rclone.org/)
   * {{< icon "fab fa-github" >}} [GitHub project page for source and bug tracker](https://github.com/rclone/rclone)

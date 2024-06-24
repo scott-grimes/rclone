@@ -1029,7 +1029,7 @@ func TestSyncWithMaxDuration(t *testing.T) {
 	accounting.GlobalStats().ResetCounters()
 	startTime := time.Now()
 	err := Sync(ctx, r.Fremote, r.Flocal, false)
-	require.True(t, errors.Is(err, context.DeadlineExceeded))
+	require.True(t, errors.Is(err, errorMaxDurationReached))
 
 	elapsed := time.Since(startTime)
 	maxTransferTime := (time.Duration(len(testFiles)) * 60 * time.Second) / time.Duration(bytesPerSecond)
@@ -1440,6 +1440,63 @@ func TestSyncOverlap(t *testing.T) {
 	checkErr(Sync(ctx, r.Fremote, FremoteSync, false))
 	checkErr(Sync(ctx, r.Fremote, r.Fremote, false))
 	checkErr(Sync(ctx, FremoteSync, FremoteSync, false))
+}
+
+// Test a sync with filtered overlap
+func TestSyncOverlapWithFilter(t *testing.T) {
+	ctx := context.Background()
+	r := fstest.NewRun(t)
+	defer r.Finalise()
+
+	fi, err := filter.NewFilter(nil)
+	require.NoError(t, err)
+	require.NoError(t, fi.Add(false, "/rclone-sync-test/"))
+	require.NoError(t, fi.Add(false, "*/layer2/"))
+	fi.Opt.ExcludeFile = []string{".ignore"}
+	ctx = filter.ReplaceConfig(ctx, fi)
+
+	subRemoteName := r.FremoteName + "/rclone-sync-test"
+	FremoteSync, err := fs.NewFs(ctx, subRemoteName)
+	require.NoError(t, FremoteSync.Mkdir(ctx, ""))
+	require.NoError(t, err)
+
+	subRemoteName2 := r.FremoteName + "/rclone-sync-test-include/layer2"
+	FremoteSync2, err := fs.NewFs(ctx, subRemoteName2)
+	require.NoError(t, FremoteSync2.Mkdir(ctx, ""))
+	require.NoError(t, err)
+
+	subRemoteName3 := r.FremoteName + "/rclone-sync-test-ignore-file"
+	FremoteSync3, err := fs.NewFs(ctx, subRemoteName3)
+	require.NoError(t, FremoteSync3.Mkdir(ctx, ""))
+	require.NoError(t, err)
+	r.WriteObject(context.Background(), "rclone-sync-test-ignore-file/.ignore", "-", t1)
+
+	checkErr := func(err error) {
+		require.Error(t, err)
+		assert.True(t, fserrors.IsFatalError(err))
+		assert.Equal(t, fs.ErrorOverlapping.Error(), err.Error())
+		accounting.GlobalStats().ResetCounters()
+	}
+
+	checkNoErr := func(err error) {
+		require.NoError(t, err)
+	}
+
+	accounting.GlobalStats().ResetCounters()
+	checkNoErr(Sync(ctx, FremoteSync, r.Fremote, false))
+	checkErr(Sync(ctx, r.Fremote, FremoteSync, false))
+	checkErr(Sync(ctx, r.Fremote, r.Fremote, false))
+	checkErr(Sync(ctx, FremoteSync, FremoteSync, false))
+
+	checkNoErr(Sync(ctx, FremoteSync2, r.Fremote, false))
+	checkErr(Sync(ctx, r.Fremote, FremoteSync2, false))
+	checkErr(Sync(ctx, r.Fremote, r.Fremote, false))
+	checkErr(Sync(ctx, FremoteSync2, FremoteSync2, false))
+
+	checkNoErr(Sync(ctx, FremoteSync3, r.Fremote, false))
+	checkErr(Sync(ctx, r.Fremote, FremoteSync3, false))
+	checkErr(Sync(ctx, r.Fremote, r.Fremote, false))
+	checkErr(Sync(ctx, FremoteSync3, FremoteSync3, false))
 }
 
 // Test with CompareDest set

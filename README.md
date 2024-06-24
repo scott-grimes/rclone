@@ -1,4 +1,5 @@
-[<img src="https://rclone.org/img/logo_on_light__horizontal_color.svg" width="50%" alt="rclone logo">](https://rclone.org/)
+[<img src="https://rclone.org/img/logo_on_light__horizontal_color.svg" width="50%" alt="rclone logo">](https://rclone.org/#gh-light-mode-only)
+[<img src="https://rclone.org/img/logo_on_dark__horizontal_color.svg" width="50%" alt="rclone logo">](https://rclone.org/#gh-dark-mode-only)
 
 [Website](https://rclone.org) |
 [Documentation](https://rclone.org/docs/) |
@@ -20,14 +21,19 @@ Rclone *("rsync for cloud storage")* is a command-line program to sync files and
 ## Storage providers
 
   * 1Fichier [:page_facing_up:](https://rclone.org/fichier/)
+  * Akamai Netstorage [:page_facing_up:](https://rclone.org/netstorage/)
   * Alibaba Cloud (Aliyun) Object Storage System (OSS) [:page_facing_up:](https://rclone.org/s3/#alibaba-oss)
   * Amazon Drive [:page_facing_up:](https://rclone.org/amazonclouddrive/) ([See note](https://rclone.org/amazonclouddrive/#status))
   * Amazon S3 [:page_facing_up:](https://rclone.org/s3/)
   * Backblaze B2 [:page_facing_up:](https://rclone.org/b2/)
   * Box [:page_facing_up:](https://rclone.org/box/)
   * Ceph [:page_facing_up:](https://rclone.org/s3/#ceph)
+  * China Mobile Ecloud Elastic Object Storage (EOS) [:page_facing_up:](https://rclone.org/s3/#china-mobile-ecloud-eos)
+  * Cloudflare R2 [:page_facing_up:](https://rclone.org/s3/#cloudflare-r2)
+  * Arvan Cloud Object Storage (AOS) [:page_facing_up:](https://rclone.org/s3/#arvan-cloud-object-storage-aos)
   * Citrix ShareFile [:page_facing_up:](https://rclone.org/sharefile/)
   * DigitalOcean Spaces [:page_facing_up:](https://rclone.org/s3/#digitalocean-spaces)
+  * Digi Storage [:page_facing_up:](https://rclone.org/koofr/#digi-storage)
   * Dreamhost [:page_facing_up:](https://rclone.org/s3/#dreamhost)
   * Dropbox [:page_facing_up:](https://rclone.org/dropbox/)
   * Enterprise File Fabric [:page_facing_up:](https://rclone.org/filefabric/)
@@ -37,7 +43,9 @@ Rclone *("rsync for cloud storage")* is a command-line program to sync files and
   * Google Photos [:page_facing_up:](https://rclone.org/googlephotos/)
   * HDFS (Hadoop Distributed Filesystem) [:page_facing_up:](https://rclone.org/hdfs/)
   * HTTP [:page_facing_up:](https://rclone.org/http/)
+  * Huawei Cloud Object Storage Service(OBS) [:page_facing_up:](https://rclone.org/s3/#huawei-obs)
   * Hubic [:page_facing_up:](https://rclone.org/hubic/)
+  * Internet Archive [:page_facing_up:](https://rclone.org/internetarchive/)
   * Jottacloud [:page_facing_up:](https://rclone.org/jottacloud/)
   * IBM COS S3 [:page_facing_up:](https://rclone.org/s3/#ibm-cos-s3)
   * Koofr [:page_facing_up:](https://rclone.org/koofr/)
@@ -65,8 +73,8 @@ Rclone *("rsync for cloud storage")* is a command-line program to sync files and
   * SeaweedFS [:page_facing_up:](https://rclone.org/s3/#seaweedfs)
   * SFTP [:page_facing_up:](https://rclone.org/sftp/)
   * StackPath [:page_facing_up:](https://rclone.org/s3/#stackpath)
+  * Storj [:page_facing_up:](https://rclone.org/storj/)
   * SugarSync [:page_facing_up:](https://rclone.org/sugarsync/)
-  * Tardigrade [:page_facing_up:](https://rclone.org/tardigrade/)
   * Tencent Cloud Object Storage (COS) [:page_facing_up:](https://rclone.org/s3/#tencent-cos)
   * Wasabi [:page_facing_up:](https://rclone.org/s3/#wasabi)
   * WebDAV [:page_facing_up:](https://rclone.org/webdav/)
@@ -75,6 +83,19 @@ Rclone *("rsync for cloud storage")* is a command-line program to sync files and
   * The local filesystem [:page_facing_up:](https://rclone.org/local/)
 
 Please see [the full list of all storage providers and their features](https://rclone.org/overview/)
+
+### Virtual storage providers
+
+These backends adapt or modify other storage providers
+
+  * Alias: rename existing remotes [:page_facing_up:](https://rclone.org/alias/)
+  * Cache: cache remotes (DEPRECATED) [:page_facing_up:](https://rclone.org/cache/)
+  * Chunker: split large files [:page_facing_up:](https://rclone.org/chunker/)
+  * Combine: combine multiple remotes into a directory tree [:page_facing_up:](https://rclone.org/combine/)
+  * Compress: compress files [:page_facing_up:](https://rclone.org/compress/)
+  * Crypt: encrypt files [:page_facing_up:](https://rclone.org/crypt/)
+  * Hasher: hash files [:page_facing_up:](https://rclone.org/hasher/)
+  * Union: join multiple remotes to work together [:page_facing_up:](https://rclone.org/union/)
 
 ## Features
 
